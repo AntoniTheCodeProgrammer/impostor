@@ -75,13 +75,37 @@ Następnie otwórz `http://localhost:8080` w przeglądarce.
 
 ### Krok 1 – Backend na Render.com
 
-1. Wgraj projekt na **GitHub** (upewnij się, że `.env` jest w `.gitignore` – jest ✅).
-2. Zaloguj się na [render.com](https://render.com) → **New → Web Service**.
-3. Podłącz repozytorium GitHub.
-4. Render automatycznie wykryje plik `render.yaml` i skonfiguruje serwis.
-5. W panelu Render → **Environment** dodaj ręcznie zmienną:
-   - `TURSO_AUTH_TOKEN` → twój token z `turso db tokens create impostor`
-6. Kliknij **Deploy**. Po chwili serwis będzie dostępny pod adresem `https://inpostor-backend.onrender.com` (nazwa może się różnić).
+> **Uwaga:** `render.yaml` jest wykrywany automatycznie tylko przez **Blueprint** (New → Blueprint).  
+> Jeśli tworzysz serwis ręcznie przez **Web Service**, skonfiguruj poniższe dane samodzielnie.
+
+#### Opcja A – Blueprint (automatyczna konfiguracja z render.yaml)
+1. Wgraj projekt na **GitHub**.
+2. Render.com → **New → Blueprint** → podłącz repo → Render wykryje `render.yaml`.
+3. Dodaj tylko zmienną `TURSO_AUTH_TOKEN` (oznaczona jako `sync: false` w pliku).
+
+#### Opcja B – Web Service (konfiguracja ręczna – tak jak zrobiłeś)
+Jeśli już masz serwis, upewnij się że te wartości są ustawione:
+
+| Pole | Wartość |
+|---|---|
+| **Root Directory** | `backend` |
+| **Build Command** | `pip install -r requirements.txt` |
+| **Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| **Runtime** | Python 3 |
+
+**Environment Variables** (Render → Environment):
+
+| Klucz | Wartość |
+|---|---|
+| `TURSO_DATABASE_URL` | `libsql://impostor-antonithecodeprogrammer.aws-eu-west-1.turso.io` |
+| `TURSO_AUTH_TOKEN` | ← **TOKEN Z TURSO – WYMAGANY!** bez niego deploy nie wystartuje |
+| `ADMIN_SEED_SECRET` | `inpostor-secret` |
+
+#### Jak zdobyć TURSO_AUTH_TOKEN
+1. Zaloguj się na [app.turso.tech](https://app.turso.tech)
+2. Wybierz bazę `impostor` → zakładka **Tokens** → **Create token**
+3. Skopiuj token i wklej w Render → Environment → `TURSO_AUTH_TOKEN`
+4. Kliknij **Manual Deploy** → serwis powinien teraz uruchomić się poprawnie.
 
 ### Krok 2 – Stwórz konto admina (jednorazowo po deploymencie)
 

@@ -16,9 +16,16 @@ load_dotenv()
 
 # Lokalnie: TURSO_DATABASE_URL może wskazywać na plik (file:users.db)
 # Na Render.com: libsql://impostor-antonithecodeprogrammer.aws-eu-west-1.turso.io
-TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "file:users.db")
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+TURSO_URL    = os.environ.get("TURSO_DATABASE_URL", "file:users.db")
+TURSO_TOKEN  = os.environ.get("TURSO_AUTH_TOKEN", "")
 ADMIN_SECRET = os.environ.get("ADMIN_SEED_SECRET", "inpostor-secret")
+
+# Walidacja przy starcie – wyraźny komunikat zamiast cryptic 400
+if TURSO_URL.startswith("libsql://") and not TURSO_TOKEN:
+    raise RuntimeError(
+        "TURSO_AUTH_TOKEN is not set! "
+        "Add it in Render.com → Environment → Add Environment Variable."
+    )
 
 # Active WebSocket connections: username -> WebSocket
 active_connections: dict[str, WebSocket] = {}
@@ -66,7 +73,12 @@ async def init_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    try:
+        await init_db()
+        print(f"[DB] Connected to: {TURSO_URL}")
+    except Exception as e:
+        print(f"[DB] FATAL: Could not initialize database: {e}")
+        raise
     yield
 
 
