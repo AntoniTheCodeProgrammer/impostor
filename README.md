@@ -1,4 +1,4 @@
-# Inpostor
+# impostor
 
 Aplikacja wspomagająca prowadzenie gry towarzyskiej (podobnej do Mafii/Among Us).
 
@@ -99,7 +99,7 @@ Jeśli już masz serwis, upewnij się że te wartości są ustawione:
 |---|---|
 | `TURSO_DATABASE_URL` | `libsql://impostor-antonithecodeprogrammer.aws-eu-west-1.turso.io` |
 | `TURSO_AUTH_TOKEN` | ← **TOKEN Z TURSO – WYMAGANY!** bez niego deploy nie wystartuje |
-| `ADMIN_SEED_SECRET` | `inpostor-secret` |
+| `ADMIN_SEED_SECRET` | `impostor-secret` |
 
 #### Jak zdobyć TURSO_AUTH_TOKEN
 1. Zaloguj się na [app.turso.tech](https://app.turso.tech)
@@ -110,9 +110,9 @@ Jeśli już masz serwis, upewnij się że te wartości są ustawione:
 ### Krok 2 – Stwórz konto admina (jednorazowo po deploymencie)
 
 ```bash
-curl -X POST https://twoj-backend.onrender.com/admin/seed \
+curl -X POST https://impostor-backend.onrender.com/admin/seed \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "twoje-haslo", "secret": "inpostor-secret"}'
+  -d '{"username": "admin", "password": "twoje-haslo", "secret": "impostor-secret"}'
 ```
 
 ### Krok 3 – Frontend na serwer hostingowy
@@ -138,7 +138,7 @@ Plik `WS_URL` generuje się automatycznie (`https://` → `wss://`).
 ## Struktura plików
 
 ```
-Inpostor/
+impostor/
 ├── backend/
 │   ├── main.py              # FastAPI + Turso (libsql-client)
 │   ├── requirements.txt     # Zależności Pythona

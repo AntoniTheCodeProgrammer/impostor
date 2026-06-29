@@ -18,7 +18,7 @@ load_dotenv()
 # Na Render.com: libsql://impostor-antonithecodeprogrammer.aws-eu-west-1.turso.io
 TURSO_URL    = os.environ.get("TURSO_DATABASE_URL", "file:users.db")
 TURSO_TOKEN  = os.environ.get("TURSO_AUTH_TOKEN", "")
-ADMIN_SECRET = os.environ.get("ADMIN_SEED_SECRET", "inpostor-secret")
+ADMIN_SECRET = os.environ.get("ADMIN_SEED_SECRET", "impostor-secret")
 
 # Walidacja przy starcie – wyraźny komunikat zamiast cryptic 400
 if TURSO_URL.startswith("libsql://") and not TURSO_TOKEN:

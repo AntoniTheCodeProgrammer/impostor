@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: inpostor-backend
+    name: impostor-backend
     env: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -11,4 +11,4 @@ services:
       - key: TURSO_AUTH_TOKEN
         sync: false          # wpisz ręcznie w panelu Render.com
       - key: ADMIN_SEED_SECRET
-        value: inpostor-secret
+        value: impostor-secret

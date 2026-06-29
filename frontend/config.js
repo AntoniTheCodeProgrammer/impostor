@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────
-//  Konfiguracja frontendu – Inpostor
+//  Konfiguracja frontendu – impostor
 //  Zmień poniższe URL-e po deploymencie na Render.com
 // ─────────────────────────────────────────────────────────────
 
-// URL backendu (HTTP) – np. https://inpostor-backend.onrender.com
+// URL backendu (HTTP) – np. https://impostor-backend.onrender.com
 // Lokalnie: http://localhost:8000
-window.API_URL = "https://inpostor-backend.onrender.com";
+window.API_URL = "https://impostor-backend.onrender.com";
 
 // URL WebSocket – generowany automatycznie z API_URL
 // https:// → wss://   |   http:// → ws://
