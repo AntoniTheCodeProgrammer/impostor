@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impostor – Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FAF5E6;
+            color: #2D3748;
+        }
+
+        /* Tab buttons */
+        .tab-btn {
+            background: #fff;   
+            border: 1px solid rgba(45, 55, 72, 0.15);
+            border-radius: 12px;
+            color: #a0aec0;
+            cursor: pointer;
+            width: 65px;
+            height: 65px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-family: 'Poppins', sans-serif;
+            text-transform: uppercase;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            box-shadow: 0 2px 4px rgba(45, 55, 72, 0.05);
+        }
+        .tab-btn i { font-size: 1.3rem; margin-bottom: 0.2rem; }
+        .tab-btn:hover {
+            color: #2D3748;
+            border-color: rgba(45, 55, 72, 0.3);
+            transform: translateY(-2px);
+        }
+        .tab-nav-item.active .tab-btn {
+            color: #fff;
+            background: #33a9f5;
+            border-color: #33a9f5;
+            box-shadow: 0 4px 10px rgba(51, 169, 245, 0.3);
+        }
+
+        /* Tab panels */
+        .tab-panel { display: none; animation: fadeIn 0.3s ease; }
+        .tab-panel.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Table styling – override Bootstrap regardless of table-borderless etc. */
+        .table {
+            font-size: 0.85rem;
+            --bs-table-bg: transparent;
+            --bs-table-border-color: rgba(45, 55, 72, 0.1);
+        }
+        .table > :not(caption) > * > * {
+            background-color: transparent !important;
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid rgba(45, 55, 72, 0.07) !important;
+        }
+        .table > thead > * > * {
+            padding: 0.45rem 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #a0aec0 !important;
+            border-bottom: 1px solid rgba(45, 55, 72, 0.12) !important;
+            background-color: transparent !important;
+            text-align: left;
+        }
+        .table > tbody > tr:last-child > * {
+            border-bottom: none !important;
+        }
+        .table > tbody > tr:hover > * {
+            background-color: rgba(45, 55, 72, 0.025) !important;
+        }
+
+        /* Section headings */
+        .section-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #a0aec0;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(45, 55, 72, 0.12);
+            margin-bottom: 0.75rem;
+        }
+
+        /* Primary action buttons */
+        .btn-primary-ghost {
+            background: rgba(51, 169, 245, 0.1);
+            border: 1px solid #33a9f5;
+            color: #33a9f5;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 7px;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .btn-primary-ghost:hover {
+            background: rgba(51, 169, 245, 0.2);
+            border-color: #1e96e0;
+            color: #1e96e0;
+            transform: translateY(-1px);
+        }
+
+        /* Ghost buttons */
+        .btn-ghost {
+            background: none;
+            border: 1px solid rgba(45, 55, 72, 0.22);
+            color: #718096;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            border-radius: 7px;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .btn-ghost:hover {
+            color: #2D3748;
+            border-color: rgba(45, 55, 72, 0.4);
+        }
+
+        /* Inline table buttons */
+        td .btn-inline {
+            padding: 0.25rem 0.55rem;
+            background: none;
+            border: 1px solid rgba(45, 55, 72, 0.18);
+            color: #718096;
+            font-size: 0.78rem;
+            border-radius: 6px;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        td .btn-inline:hover { color: #2D3748; border-color: rgba(45, 55, 72, 0.38); }
+
+        /* Messages */
+        .msg-success { font-size: 0.8rem; color: #2f855a; }
+        .msg-error   { font-size: 0.8rem; color: #e53e3e; }
+
+        /* inputs */
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select {
+            font-family: 'Poppins', sans-serif;
+        }
+        input::placeholder { color: #a0aec0; }
+        input:focus, select:focus { border-color: #33a9f5; box-shadow: 0 0 0 0.15rem rgba(51,169,245,0.2); }
+
+        /* login form */
+        #login-view {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #login-view.d-none { display: none !important; }
+
+        /* admin name highlight */
+        #admin-name { color: #33a9f5; font-weight: 600; }
+    </style>
+</head>
+
+<body>
+
+    <!-- ── Login ── -->
+    <div id="login-view">
+        <h1 class="fw-bold mb-4">Impostor – Panel Admina</h1>
+        <form id="login-form" class="d-flex flex-column gap-2" style="width: 100%; max-width: 300px;">
+            <input id="username" type="text" class="form-control" placeholder="Login admina" required>
+            <input id="password" type="password" class="form-control" placeholder="Hasło" required>
+            <button type="submit" class="btn btn-primary-ghost w-100 mt-1">Zaloguj</button>
+        </form>
+        <p id="error-msg" class="msg-error mt-2" style="display:none;"></p>
+    </div>
+
+    <!-- ── Admin panel ── -->
+    <div id="admin-view" class="container-fluid py-4 px-4 d-none">
+
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+            <h1 class="fw-bold fs-5 mb-0">Inpostor – Panel Admina</h1>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-muted small">Zalogowany jako: <span id="admin-name"></span></span>
+                <button id="logout-btn" class="btn btn-ghost btn-sm">Wyloguj</button>
+            </div>
+        </div>
+
+        <!-- Two-column layout -->
+        <div class="row g-4">
+
+            <!-- LEFT: Gracze -->
+            <div class="col-12 col-md-5">
+                <div class="section-label">Gracze</div>
+                <table class="table table-borderless" id="user-table">
+                    <thead>
+                        <tr>
+                            <th>Nazwa</th>
+                            <th>Rola</th>
+                            <th>Status</th>
+                            <th>Grupa</th>
+                            <th>Wyzwanie</th>
+                            <th>Akcja</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-list"></tbody>
+                </table>
+                <button id="refresh-btn" class="btn btn-ghost btn-sm mt-1">Odśwież</button>
+            </div>
+
+            <!-- Divider -->
+            <div class="col-12 col-md-1 d-none d-md-flex justify-content-center">
+                <div class="vr" style="opacity: 0.18;"></div>
+            </div>
+
+            <!-- RIGHT: Tabs -->
+            <div class="col-12 col-md-6">
+                <div class="d-flex gap-3">
+
+                    <!-- Tab content -->
+                    <div class="flex-grow-1">
+
+                        <!-- Role -->
+                        <div class="tab-panel active" id="tab-roles">
+                            <div class="section-label">Dostosuj role</div>
+                            <table class="table table-borderless">
+                                <thead>
+                                    <tr>
+                                        <th>Nazwa</th>
+                                        <th>Opis</th>
+                                        <th>Ile</th>
+                                        <th>Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="roles-body"></tbody>
+                            </table>
+                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                <button id="add-role-btn" class="btn btn-ghost btn-sm">+ Dodaj rolę</button>
+                            </div>
+                            <hr style="border-color: rgba(45,55,72,0.1); margin: 1.2rem 0 1rem;">
+                            <div class="section-label">Wylosuj role</div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <button id="assign-btn" class="btn btn-primary-ghost btn-sm">🎲 Wylosuj role</button>
+                            </div>
+                            <p id="assign-msg" class="msg-success mt-2" style="display:none;"></p>
+                            <p id="assign-err" class="msg-error mt-2" style="display:none;"></p>
+                        </div>
+
+                        <!-- Zadania -->
+                        <div class="tab-panel" id="tab-quests">
+                            <div class="section-label">Zadania</div>
+                            <table class="table table-borderless">
+                                <thead>
+                                    <tr>
+                                        <th>Tytuł</th>
+                                        <th>Opis</th>
+                                        <th>Grupy</th>
+                                        <th>Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="quests-body"></tbody>
+                            </table>
+                            <button id="add-quest-btn" class="btn btn-ghost btn-sm mt-1">+ Dodaj zadanie</button>
+
+                            <!-- Aktywacja -->
+                            <hr style="border-color: rgba(45,55,72,0.1); margin: 1.2rem 0 1rem;">
+                            <div class="section-label">Aktywuj zadanie</div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <select id="quest-select" class="form-select form-select-sm" style="max-width:220px;"></select>
+                                <button id="activate-task-btn" class="btn btn-primary-ghost btn-sm">▶ Aktywuj</button>
+                            </div>
+                            <p id="activate-msg" class="msg-success mt-2" style="display:none;"></p>
+                            <p id="activate-err" class="msg-error mt-2" style="display:none;"></p>
+                        </div>
+
+                        <!-- Wyzwania -->
+                        <div class="tab-panel" id="tab-challenges">
+                            <div class="section-label">Wyzwania</div>
+                            <table class="table table-borderless">
+                                <thead>
+                                    <tr>
+                                        <th><input type="checkbox" id="check-all-challenges" title="Zaznacz wszystkie"></th>
+                                        <th>Tytuł</th>
+                                        <th>Opis</th>
+                                        <th>Nagroda</th>
+                                        <th>Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="challenges-body">
+                                </tbody>
+                            </table>
+                            <button id="add-challenge-btn" class="btn btn-ghost btn-sm mt-1">+ Dodaj wyzwanie</button>
+
+                            <!-- Losowanie wyzwań -->
+                            <hr style="border-color: rgba(45,55,72,0.1); margin: 1.2rem 0 1rem;">
+                            <div class="section-label">Losowanie wyzwań</div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <input type="number" id="draw-count" class="form-control form-control-sm" style="width: 70px;" min="1" value="1" title="Ilość graczy">
+                                <button id="draw-challenges-btn" class="btn btn-primary-ghost btn-sm">🎲 Wylosuj</button>
+                            </div>
+                            <p class="text-muted small mt-1">Zostanie wylosowanych tylu graczy z przypisaniem wyzwania z puli zaznaczonych wyżej.</p>
+                            <p id="draw-msg" class="msg-success mt-2" style="display:none;"></p>
+                            <p id="draw-err" class="msg-error mt-2" style="display:none;"></p>
+                        </div>
+
+                        <!-- Zasady -->
+                        <div class="tab-panel" id="tab-rules">
+                            <div class="section-label">Zasady gry</div>
+                            <h5 class="fw-semibold mb-3" style="font-size: 1rem; color: #2D3748;">Co robić a czego nie?</h5>
+                            <ol class="text-muted" style="font-size: 0.85rem; line-height: 1.7; max-width: 480px; padding-left: 1rem;">
+                                <li class="mb-2">
+                                    <strong>MISTRZ GRY</strong> JEST ABSOLUTNYM <strong>WŁADCĄ</strong>, JEST NIEOMYLNY I <strong>NIE MOŻNA MU SIĘ SPRZECIWIAĆ</strong>!
+                                </li>
+                                <li class="mb-2">
+                                    Każda z osob w swoim telefonie ma indywidualny panel gry. Jest całkowity zakaz pokazywania wzajemnie tego panelu. 
+                                </li>
+                                <li class="mb-2">
+                                    Każdy gracz otrzyma role, która jest tajemnicą. Jest zakaz pokazywania ról.
+                                </li>
+                                <li class="mb-2">
+                                    Każda osoba ma się wczuć w swoją role i dążyć do celu zapisanego w opisie.
+                                </li>
+                                <li class="mb-2">
+                                    Gracze będą otrzymywać zadania wraz z opisem i grupą do których należą. Szczegóły co do wykonania zadania przedstawi <strong>ABSOLUTNY WŁADCA i MISTRZ GRY</strong>.
+                                </li>
+                                <li class="mb-2">
+                                    Gracze będą mieli również okazje otrzymać indywidualne wyzwania, których wykonanie daje dodatkowe korzyści w grze. Jest zakaz zdradzania wyzwan jakie się otrzymało.
+                                </li>
+                                <li class="mb-2">
+                                    Każda wątpliwość co gry może zostać rozwiana osobiście przez MISTRZA GRY, który jest absolutnym autorytetem w tej grze i jego słowo jest prawem. Jednak najpierw przeczytaj zasady raz jeszcze by uniknąć zadawania głupich pytań.
+                                </li>
+                                <li class="mb-2">
+                                    Wszelkie próby oszustwa będą karane na miejscu przez <strong>ABSOLUTNEGO WŁADCE i MISTRZA GRY</strong>.
+                                </li>
+                            </ol>
+                        </div>
+
+                        <!-- Tutorial -->
+                        <div class="tab-panel" id="tab-tutorial">
+                            <div class="section-label">Tutorial – Jak grać krok po kroku</div>
+                            <h5 class="fw-semibold mb-3" style="font-size: 1rem; color: #2D3748;">Jak grać w Impostora?</h5>
+                            <ol class="text-muted" style="font-size: 0.85rem; line-height: 1.7; max-width: 480px; padding-left: 1rem;">
+                                <li class="mb-2"><strong>Zasady:</strong> Zapoznaj wszystkich uczestników z zasadami i upewnij się, że je zrozumieli.</li>
+                                <li class="mb-2"><strong>Logowanie:</strong> Daj im link (to ten na ktorym jesteś ale bez /admin na koncu) a oni maja podac tam login i haslo jakie chcą ale musza je zapamietac bo pozniej bedzie trzeba sie ponownie logować.</li>
+                                <li class="mb-2"><strong>Rozpoczęcie gry:</strong> Gdy wszyscy sa zalogowani to uruchamiasz losowanie ról(upewnij się że role jakie chcesz oraz ilosc graczy z tą rolą jest odpowiednia). Upewnij się że każdy zapoznał się ze swoją rolą. </li>
+                                <li class="mb-2"><strong>Zadania:</strong> W zakładce <em>Zadania</em> dodaj najlepiej wcześniej takie które gracze mają wykonać i po koleji aktywuj te ktore chcesz. Mają one jedynie nazwe i opis więc musisz się przygotować na doprecyzowania zadania fizycznie. </li>
+                                <li class="mb-2"><strong>Wyzwania:</strong> Również lepiej przygotować je wcześniej w odpowiedniej zakładce (<em>Wyzwania</em>). Wylosuj je w dowolnym momencie gry. Ich ilość ma być nie duża. Że jak ktoś dostaje wyzwanie to jest cool. Odbieraj również wyzwania jak ktoś za długo ma dane wyzwanie oraz jak je wykona. Wyzwania to dodatkowe zadania po których można dostać nagrode (np. Zostanie inpostorem w trakcie gry). </li>
+                                <li class="mb-2"><strong>Całość:</strong> Działa to jak normalna mafia ale ma zadania w trakcie dnia. Na poczatku dajesz zadanie oni je wykonują mają impostorzy mają przeszkadzać a cywile się domyslic kto jest impostorem. Po zadaniu jest glosowanie i się kogoś wywala a potem mafia kogoś wywala. Wiadomo. Mogą być też inne role jak obronca czy policjan. Pełna dowolność.</li>
+                                <li class="mb-2"><strong>Przykładowa gra:</strong> Wszyscy się spotykają losują i dostają role. I nastepnie zaczyna się zadanie. Zadanie to znalezienie elementow ukrytych po całej Choroszczy. A jedyna podpowiedz to zdjecie miejsca ukrycia elementu. Losują się grupy lub gracze sami wybierają się w grupy, dostają zdjecia i wyruszają. W grupie numer 2 Piotr który był impostorem znalazł artefakt którym był hobby horse i przełożył go w inne miejsce. Grupa numer 2 nieodnalazła swojego elementu i teraz mogą wygłosować tego kogo podejrzewają o ten czyn. Potem mafia wywala tego kto podejrzewa albo nie i gramy dalej. Zadanie numer 2 to przygotowanie sztuki teatralnej, 3 to gotowania z tik toka ze jeden uszy jeden oczy a ten rece wiesz ocb. 4 to polowania na niedzwiedzia którym jest tata i cos ala podchody a 5 to nagle atak kosmitow i kazdy musi budować schron przed kosmitami. I w każdym zadaniu musi być okreslone co oznacza przegrana a co wygrana. </li>
+                            </ol>
+                        </div>
+
+                    </div>
+
+                    <!-- Tab nav (vertical icons) -->
+                    <nav class="d-flex flex-column gap-2 flex-shrink-0">
+                        <ul class="list-unstyled d-flex flex-column gap-2 m-0 p-0">
+                            <li class="tab-nav-item active"><button class="tab-btn" data-tab="tab-roles" title="Role"><i class="fa-solid fa-users-gear"></i><span>Role</span></button></li>
+                            <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-quests" title="Zadania"><i class="fa-solid fa-clipboard-list"></i><span>Zadania</span></button></li>
+                            <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-challenges" title="Wyzwania"><i class="fa-solid fa-trophy"></i><span>Wyzwania</span></button></li>
+                            <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-rules" title="Zasady"><i class="fa-solid fa-book"></i><span>Zasady</span></button></li>
+                            <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-tutorial" title="Tutorial"><i class="fa-solid fa-graduation-cap"></i><span>Tutorial</span></button></li>
+                        </ul>
+                    </nav>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        const API = window.API_URL;
+
+        function getAdmin() { return localStorage.getItem("admin_username"); }
+        function setAdmin(u) { localStorage.setItem("admin_username", u); }
+        function clearAdmin() { localStorage.removeItem("admin_username"); }
+
+        // ── Tab switching ─────────────────────────────────────────────────────
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset.tab;
+                document.querySelectorAll('.tab-nav-item').forEach(li => li.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                btn.closest('.tab-nav-item').classList.add('active');
+                document.getElementById(target).classList.add('active');
+            });
+        });
+
+        // ── Users ─────────────────────────────────────────────────────────────
+
+        async function loadUsers() {
+            const tbody = document.getElementById("user-list");
+            try {
+                const res = await fetch(`${API}/admin/users`);
+                const data = await res.json();
+                tbody.innerHTML = "";
+                if (!data.users.length) {
+                    tbody.innerHTML = "<tr><td colspan='6'>Brak graczy.</td></tr>";
+                    return;
+                }
+                for (const user of data.users) {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${user.username}</td>
+                        <td>${user.role ?? "nieznana"}</td>
+                        <td>${user.online ? "🟢" : "⚫"}</td>
+                        <td>${user.group_num ?? "–"}</td>
+                        <td>${user.challenge ?? "–"}</td>
+                        <td>
+                            <button class="btn-inline" onclick="deleteUser('${user.username}')">Usuń</button>
+                            ${user.challenge ? `<button class="btn-inline" onclick="deleteUserChallenge('${user.username}')">Usuń wyz.</button>` : ""}
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            } catch { tbody.innerHTML = "<tr><td colspan='6'>Błąd.</td></tr>"; }
+        }
+
+        async function deleteUser(username) {
+            if (!confirm(`Usunąć "${username}"?`)) return;
+            const res = await fetch(`${API}/admin/users/${username}`, { method: "DELETE" });
+            if (res.ok) loadUsers();
+            else alert("Błąd usuwania.");
+        }
+
+        async function deleteUserChallenge(username) {
+            if (!confirm(`Usunąć wyzwanie graczowi "${username}"?`)) return;
+            const res = await fetch(`${API}/admin/users/${username}/challenge`, { method: "DELETE" });
+            if (res.ok) loadUsers();
+            else alert("Błąd usuwania wyzwania.");
+        }
+
+        // ── Roles ─────────────────────────────────────────────────────────────
+
+        async function loadRoles() {
+            const tbody = document.getElementById("roles-body");
+            const res = await fetch(`${API}/admin/roles`);
+            const data = await res.json();
+            tbody.innerHTML = "";
+            for (const role of data.roles) tbody.appendChild(makeRoleRow(role));
+        }
+
+        function makeRoleRow(role) {
+            const tr = document.createElement("tr");
+            tr.dataset.id = role.id;
+            renderRoleView(tr, role);
+            return tr;
+        }
+
+        function renderRoleView(tr, role) {
+            tr.innerHTML = `
+                <td>${role.name}</td>
+                <td>${role.description}</td>
+                <td>${role.count}</td>
+                <td>
+                    <button class="btn-inline" onclick="editRoleRow(this,${role.id},'${escQ(role.name)}','${escQ(role.description)}',${role.count})">Edytuj</button>
+                    <button class="btn-inline" onclick="deleteRole(${role.id},this)">Usuń</button>
+                </td>`;
+        }
+
+        function renderRoleEdit(tr, id, name, description, count) {
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm r-name" value="${escQ(name)}" style="width:90px"></td>
+                <td><input class="form-control form-control-sm r-desc" value="${escQ(description)}" style="width:180px"></td>
+                <td><input class="form-control form-control-sm r-count" type="number" min="1" value="${count}" style="width:55px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveRole(this,${id})">Zatwierdź</button>
+                    <button class="btn-inline" onclick="cancelRole(this,${id},'${escQ(name)}','${escQ(description)}',${count})">Anuluj</button>
+                </td>`;
+        }
+
+        function editRoleRow(btn, id, name, desc, count) { renderRoleEdit(btn.closest("tr"), id, name, desc, count); }
+        function cancelRole(btn, id, n, d, c) { renderRoleView(btn.closest("tr"), { id, name: n, description: d, count: c }); }
+
+        async function saveRole(btn, id) {
+            const tr = btn.closest("tr");
+            const name = tr.querySelector(".r-name").value.trim();
+            const desc = tr.querySelector(".r-desc").value.trim();
+            const count = parseInt(tr.querySelector(".r-count").value);
+            if (!name || count < 1) { alert("Uzupełnij pola."); return; }
+            const res = await fetch(`${API}/admin/roles/${id}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, description: desc, count }),
+            });
+            if (!res.ok) { alert("Błąd zapisu."); return; }
+            renderRoleView(tr, await res.json());
+        }
+
+        async function deleteRole(id, btn) {
+            if (!confirm("Usunąć rolę?")) return;
+            const res = await fetch(`${API}/admin/roles/${id}`, { method: "DELETE" });
+            if (res.ok) btn.closest("tr").remove();
+            else alert("Błąd.");
+        }
+
+        document.getElementById("add-role-btn").addEventListener("click", () => {
+            const tbody = document.getElementById("roles-body");
+            const tr = document.createElement("tr");
+            tr.dataset.id = "new";
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm r-name" placeholder="Nazwa" style="width:90px"></td>
+                <td><input class="form-control form-control-sm r-desc" placeholder="Opis" style="width:180px"></td>
+                <td><input class="form-control form-control-sm r-count" type="number" min="1" value="1" style="width:55px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveNewRole(this)">Zatwierdź</button>
+                    <button class="btn-inline" onclick="this.closest('tr').remove()">Anuluj</button>
+                </td>`;
+            tbody.appendChild(tr);
+            tr.querySelector(".r-name").focus();
+        });
+
+        async function saveNewRole(btn) {
+            const tr = btn.closest("tr");
+            const name = tr.querySelector(".r-name").value.trim();
+            const desc = tr.querySelector(".r-desc").value.trim();
+            const count = parseInt(tr.querySelector(".r-count").value);
+            if (!name || count < 1) { alert("Uzupełnij pola."); return; }
+            const res = await fetch(`${API}/admin/roles`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, description: desc, count }),
+            });
+            if (!res.ok) { alert((await res.json()).detail || "Błąd."); return; }
+            renderRoleView(tr, await res.json());
+        }
+
+        document.getElementById("assign-btn").addEventListener("click", async () => {
+            const msg = document.getElementById("assign-msg");
+            const err = document.getElementById("assign-err");
+            msg.style.display = err.style.display = "none";
+            const res = await fetch(`${API}/admin/assign-roles`, { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
+            msg.textContent = "Wylosowano: " + Object.entries(data.assignments).map(([u, r]) => `${u}→${r}`).join(", ");
+            msg.style.display = "block";
+            loadUsers();
+        });
+
+        // ── Quests ────────────────────────────────────────────────────────────
+
+        let questsCache = [];
+
+        function populateQuestSelect() {
+            const sel = document.getElementById("quest-select");
+            sel.innerHTML = questsCache.length
+                ? questsCache.map(q => `<option value="${q.id}">${q.title}</option>`).join("")
+                : '<option value="">Brak zadań</option>';
+        }
+
+        async function loadQuests() {
+            const tbody = document.getElementById("quests-body");
+            const res = await fetch(`${API}/admin/quests`);
+            const data = await res.json();
+            questsCache = data.quests;
+            tbody.innerHTML = "";
+            for (const q of data.quests) tbody.appendChild(makeQuestRow(q));
+            populateQuestSelect();
+        }
+
+        function makeQuestRow(q) {
+            const tr = document.createElement("tr");
+            tr.dataset.id = q.id;
+            renderQuestView(tr, q);
+            return tr;
+        }
+
+        function renderQuestView(tr, q) {
+            tr.innerHTML = `
+                <td>${q.title}</td>
+                <td>${q.description}</td>
+                <td>${q.num_groups ?? 1}</td>
+                <td>
+                    <button class="btn-inline" onclick="editQuest(this,${q.id},'${escQ(q.title)}','${escQ(q.description)}',${q.num_groups ?? 1})">Edytuj</button>
+                    <button class="btn-inline" onclick="deleteQuest(${q.id},this)">Usuń</button>
+                </td>`;
+        }
+
+        function renderQuestEdit(tr, id, title, description, numGroups) {
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm q-title" value="${escQ(title)}" style="width:120px"></td>
+                <td><input class="form-control form-control-sm q-desc" value="${escQ(description)}" style="width:170px"></td>
+                <td><input class="form-control form-control-sm q-groups" type="number" min="1" value="${numGroups}" style="width:55px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveQuest(this,${id})">Zatwierdź</button>
+                    <button class="btn-inline" onclick="cancelQuest(this,${id},'${escQ(title)}','${escQ(description)}',${numGroups})">Anuluj</button>
+                </td>`;
+        }
+
+        function editQuest(btn, id, title, desc, numGroups) { renderQuestEdit(btn.closest("tr"), id, title, desc, numGroups); }
+        function cancelQuest(btn, id, t, d, g) { renderQuestView(btn.closest("tr"), { id, title: t, description: d, num_groups: g }); }
+
+        async function saveQuest(btn, id) {
+            const tr = btn.closest("tr");
+            const title = tr.querySelector(".q-title").value.trim();
+            const desc = tr.querySelector(".q-desc").value.trim();
+            const numGroups = parseInt(tr.querySelector(".q-groups").value) || 1;
+            if (!title) { alert("Podaj tytuł."); return; }
+            const res = await fetch(`${API}/admin/quests/${id}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title, description: desc, num_groups: numGroups }),
+            });
+            if (!res.ok) { alert("Błąd zapisu."); return; }
+            const updated = await res.json();
+            renderQuestView(tr, updated);
+            questsCache = questsCache.map(q => q.id === id ? updated : q);
+            populateQuestSelect();
+        }
+
+        async function deleteQuest(id, btn) {
+            if (!confirm("Usunąć zadanie?")) return;
+            const res = await fetch(`${API}/admin/quests/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                btn.closest("tr").remove();
+                questsCache = questsCache.filter(q => q.id !== id);
+                populateQuestSelect();
+            } else alert("Błąd.");
+        }
+
+        document.getElementById("add-quest-btn").addEventListener("click", () => {
+            const tbody = document.getElementById("quests-body");
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm q-title" placeholder="Tytuł" style="width:120px"></td>
+                <td><input class="form-control form-control-sm q-desc" placeholder="Opis" style="width:170px"></td>
+                <td><input class="form-control form-control-sm q-groups" type="number" min="1" value="1" style="width:55px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveNewQuest(this)">Zatwierdź</button>
+                    <button class="btn-inline" onclick="this.closest('tr').remove()">Anuluj</button>
+                </td>`;
+            tbody.appendChild(tr);
+            tr.querySelector(".q-title").focus();
+        });
+
+        async function saveNewQuest(btn) {
+            const tr = btn.closest("tr");
+            const title = tr.querySelector(".q-title").value.trim();
+            const desc = tr.querySelector(".q-desc").value.trim();
+            const numGroups = parseInt(tr.querySelector(".q-groups").value) || 1;
+            if (!title) { alert("Podaj tytuł."); return; }
+            const res = await fetch(`${API}/admin/quests`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title, description: desc, num_groups: numGroups }),
+            });
+            if (!res.ok) { alert("Błąd dodawania."); return; }
+            const created = await res.json();
+            renderQuestView(tr, created);
+            questsCache.push(created);
+            populateQuestSelect();
+        }
+
+        document.getElementById("activate-task-btn").addEventListener("click", async () => {
+            const msg = document.getElementById("activate-msg");
+            const err = document.getElementById("activate-err");
+            msg.style.display = err.style.display = "none";
+            const questId = parseInt(document.getElementById("quest-select").value);
+            if (!questId) { err.textContent = "Wybierz zadanie."; err.style.display = "block"; return; }
+            const res = await fetch(`${API}/admin/activate-task`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ quest_id: questId }),
+            });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
+            msg.textContent = `Aktywowano "${data.quest}" dla ${data.assignments.length} graczy.`;
+            msg.style.display = "block";
+            loadUsers();
+        });
+
+        // ── Challenges ────────────────────────────────────────────────────────
+
+        async function loadChallenges() {
+            const tbody = document.getElementById("challenges-body");
+            const res = await fetch(`${API}/admin/challenges`);
+            const data = await res.json();
+            tbody.innerHTML = "";
+            for (const c of data.challenges) tbody.appendChild(makeChallengeRow(c));
+        }
+
+        function makeChallengeRow(c) {
+            const tr = document.createElement("tr");
+            tr.dataset.id = c.id;
+            renderChallengeView(tr, c);
+            return tr;
+        }
+
+        function renderChallengeView(tr, c) {
+            tr.innerHTML = `
+                <td><input class="form-check-input ch-check" type="checkbox" value="${c.id}"></td>
+                <td>${c.title}</td>
+                <td>${c.description}</td>
+                <td>${c.reward}</td>
+                <td>
+                    <button class="btn-inline" onclick="editChallenge(this,${c.id},'${escQ(c.title)}','${escQ(c.description)}','${escQ(c.reward)}')">Edytuj</button>
+                    <button class="btn-inline" onclick="deleteChallenge(${c.id},this)">Usuń</button>
+                </td>`;
+        }
+
+        function renderChallengeEdit(tr, id, title, description, reward) {
+            tr.innerHTML = `
+                <td><input class="form-check-input ch-check" type="checkbox" value="${id}" disabled></td>
+                <td><input class="form-control form-control-sm c-title" value="${escQ(title)}" style="width:100px"></td>
+                <td><input class="form-control form-control-sm c-desc" value="${escQ(description)}" style="width:150px"></td>
+                <td><input class="form-control form-control-sm c-reward" value="${escQ(reward)}" style="width:100px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveChallenge(this,${id})">Zatwierdź</button>
+                    <button class="btn-inline" onclick="cancelChallenge(this,${id},'${escQ(title)}','${escQ(description)}','${escQ(reward)}')">Anuluj</button>
+                </td>`;
+        }
+
+        function editChallenge(btn, id, title, desc, reward) { renderChallengeEdit(btn.closest("tr"), id, title, desc, reward); }
+        function cancelChallenge(btn, id, t, d, r) { renderChallengeView(btn.closest("tr"), { id, title: t, description: d, reward: r }); }
+
+        async function saveChallenge(btn, id) {
+            const tr = btn.closest("tr");
+            const title = tr.querySelector(".c-title").value.trim();
+            const desc = tr.querySelector(".c-desc").value.trim();
+            const reward = tr.querySelector(".c-reward").value.trim();
+            if (!title) { alert("Podaj tytuł."); return; }
+            const res = await fetch(`${API}/admin/challenges/${id}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title, description: desc, reward }),
+            });
+            if (!res.ok) { alert("Błąd zapisu."); return; }
+            renderChallengeView(tr, await res.json());
+        }
+
+        async function deleteChallenge(id, btn) {
+            if (!confirm("Usunąć wyzwanie?")) return;
+            const res = await fetch(`${API}/admin/challenges/${id}`, { method: "DELETE" });
+            if (res.ok) btn.closest("tr").remove();
+            else alert("Błąd.");
+        }
+
+        document.getElementById("add-challenge-btn").addEventListener("click", () => {
+            const tbody = document.getElementById("challenges-body");
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td></td>
+                <td><input class="form-control form-control-sm c-title" placeholder="Tytuł" style="width:100px"></td>
+                <td><input class="form-control form-control-sm c-desc" placeholder="Opis" style="width:150px"></td>
+                <td><input class="form-control form-control-sm c-reward" placeholder="Nagroda" style="width:100px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveNewChallenge(this)">Zatwierdź</button>
+                    <button class="btn-inline" onclick="this.closest('tr').remove()">Anuluj</button>
+                </td>`;
+            tbody.appendChild(tr);
+            tr.querySelector(".c-title").focus();
+        });
+
+        async function saveNewChallenge(btn) {
+            const tr = btn.closest("tr");
+            const title = tr.querySelector(".c-title").value.trim();
+            const desc = tr.querySelector(".c-desc").value.trim();
+            const reward = tr.querySelector(".c-reward").value.trim();
+            if (!title) { alert("Podaj tytuł."); return; }
+            const res = await fetch(`${API}/admin/challenges`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title, description: desc, reward }),
+            });
+            if (!res.ok) { alert("Błąd dodawania."); return; }
+            renderChallengeView(tr, await res.json());
+        }
+
+        document.getElementById("check-all-challenges").addEventListener("change", (e) => {
+            document.querySelectorAll(".ch-check:not([disabled])").forEach(cb => cb.checked = e.target.checked);
+        });
+
+        document.getElementById("draw-challenges-btn").addEventListener("click", async () => {
+            const msg = document.getElementById("draw-msg");
+            const err = document.getElementById("draw-err");
+            msg.style.display = err.style.display = "none";
+            const checked = Array.from(document.querySelectorAll(".ch-check:checked")).map(cb => parseInt(cb.value));
+            const count = parseInt(document.getElementById("draw-count").value);
+            
+            if (checked.length === 0) { err.textContent = "Zaznacz przynajmniej jedno wyzwanie."; err.style.display = "block"; return; }
+            if (!count || count < 1) { err.textContent = "Prawidłowa liczba to minimum 1."; err.style.display = "block"; return; }
+
+            const res = await fetch(`${API}/admin/draw-challenges`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ challenge_ids: checked, count }),
+            });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
+            
+            msg.textContent = `Rozlosowano wyzwania dla ${data.assignments.length} graczy.`;
+            msg.style.display = "block";
+            loadUsers();
+        });
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        function escQ(s) { return String(s).replace(/'/g, "\'").replace(/"/g, "&quot;"); }
+
+        // ── Render / init ─────────────────────────────────────────────────────
+
+        function render() {
+            const admin = getAdmin();
+            const loginView = document.getElementById("login-view");
+            const adminView = document.getElementById("admin-view");
+            if (admin) {
+                loginView.classList.add("d-none");
+                adminView.classList.remove("d-none");
+                document.getElementById("admin-name").textContent = admin;
+                loadUsers();
+                loadRoles();
+                loadQuests();
+                loadChallenges();
+            } else {
+                loginView.classList.remove("d-none");
+                adminView.classList.add("d-none");
+            }
+        }
+
+        document.getElementById("login-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value;
+            const errEl = document.getElementById("error-msg");
+            errEl.style.display = "none";
+            try {
+                const res = await fetch(`${API}/admin/login`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password }),
+                });
+                const data = await res.json();
+                if (!res.ok) { errEl.textContent = data.detail; errEl.style.display = "block"; return; }
+                setAdmin(data.username);
+                render();
+            } catch { errEl.textContent = "Brak połączenia"; errEl.style.display = "block"; }
+        });
+
+        document.getElementById("logout-btn").addEventListener("click", () => { clearAdmin(); render(); });
+        document.getElementById("refresh-btn").addEventListener("click", loadUsers);
+
+        setInterval(() => { if (getAdmin()) loadUsers(); }, 5000);
+
+        render();
+    </script>
+</body>
+
+</html>
