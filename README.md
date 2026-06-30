@@ -9,8 +9,8 @@ Aplikacja wspomagająca prowadzenie gry towarzyskiej (podobnej do Mafii/Among Us
 | Warstwa | Technologia |
 |---|---|
 | Backend API | Python (FastAPI) → **Render.com** |
-| Baza danych | **Turso** (libSQL – SQLite w chmurze) |
-| Frontend | Statyczne pliki HTML → **Serwer hostingowy** |
+| Baza danych | SQLite (libSQL w chmurze) → **Turso**  |
+| Frontend | HTML → **Serwer hostingowy** |
 
 ---
 
@@ -83,7 +83,7 @@ Następnie otwórz `http://localhost:8080` w przeglądarce.
 2. Render.com → **New → Blueprint** → podłącz repo → Render wykryje `render.yaml`.
 3. Dodaj tylko zmienną `TURSO_AUTH_TOKEN` (oznaczona jako `sync: false` w pliku).
 
-#### Opcja B – Web Service (konfiguracja ręczna – tak jak zrobiłeś)
+#### Opcja B – Web Service (konfiguracja ręczna)
 Jeśli już masz serwis, upewnij się że te wartości są ustawione:
 
 | Pole | Wartość |
@@ -142,8 +142,7 @@ impostor/
 ├── backend/
 │   ├── main.py              # FastAPI + Turso (libsql-client)
 │   ├── requirements.txt     # Zależności Pythona
-│   ├── .env.example         # Przykładowy plik zmiennych środowiskowych
-│   └── .venv/               # Lokalne środowisko (nie commituj)
+│   └── .env.example         # Przykładowy plik zmiennych środowiskowych
 ├── frontend/
 │   ├── index.html           # Panel gracza
 │   ├── admin.html           # Panel Mistrza Gry
