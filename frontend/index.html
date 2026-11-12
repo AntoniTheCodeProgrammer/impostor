@@ -15,6 +15,115 @@
             color: #2D3748;
         }
 
+        body.is-logged-in {
+            justify-content: flex-start !important;
+            padding: 3rem 1.25rem;
+        }
+
+        #logged-view {
+            --title-size: clamp(2.3rem, 10vw, 4.5rem);
+            max-width: 560px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            position: relative;
+        }
+
+        /* Rozmiar i położenie względem liter tytułu: od góry wielkiej litery do linii bazowej */
+        .logout-icon-btn {
+            position: absolute;
+            right: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: calc(var(--title-size) * 0.9);
+            height: calc(var(--title-size) * 0.9);
+            padding: 0;
+            color: #2D3748;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(45, 55, 72, 0.18);
+            border-radius: calc(var(--title-size) * 0.18);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .logout-icon-btn svg {
+            width: 55%;
+            height: 55%;
+        }
+
+        .logout-icon-btn:hover,
+        .logout-icon-btn:focus-visible {
+            background: #2D3748;
+            color: #FAF5E6;
+        }
+
+        .page-title {
+            font-size: var(--title-size);
+            letter-spacing: -0.07em;
+            line-height: 1;
+            margin-bottom: 0.6rem;
+        }
+
+        .greeting {
+            color: #718096;
+            margin-bottom: 2rem;
+        }
+
+        .role-card,
+        .content-card {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(45, 55, 72, 0.1);
+            border-radius: 18px;
+            box-shadow: 0 8px 24px rgba(45, 55, 72, 0.05);
+        }
+
+        .role-card {
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .role-label,
+        .section-heading {
+            color: #718096;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .role-value {
+            display: block;
+            font-size: 1.75rem;
+            line-height: 1.3;
+            margin-bottom: 1rem;
+        }
+
+        .role-toggle {
+            border: 1px solid rgba(45, 55, 72, 0.2);
+            color: #2D3748;
+            font-weight: 500;
+            padding: 0.55rem 1.25rem;
+        }
+
+        .role-toggle:hover {
+            background: #2D3748;
+            color: #FAF5E6;
+        }
+
+        .content-section {
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+
+        .section-heading {
+            margin: 0 0 0.75rem 0.25rem;
+        }
+
+        .content-card {
+            padding: 1.25rem 1.5rem;
+        }
+
         .btn-dark-custom {
             background-color: #2D3748;
             color: #FAF5E6;
@@ -28,10 +137,15 @@
             transform: translateY(-2px);
         }
 
-        .task-card {
-            background: rgba(255, 255, 255, 0.6);
-            border: 1px solid rgba(45, 55, 72, 0.12);
-            border-radius: 12px;
+        @media (max-width: 480px) {
+            body.is-logged-in {
+                padding: 2rem 1rem;
+            }
+
+            .role-card,
+            .content-card {
+                padding: 1.1rem;
+            }
         }
 
         #error-msg {
@@ -55,63 +169,159 @@
     </main>
 
     <!-- ══ WIDOK PO ZALOGOWANIU ══ -->
-    <main id="logged-view" class="w-100 text-center" style="max-width: 360px; display: none;">
-        <h1 class="fw-bold mb-3">Impostor</h1>
-        <p id="greeting" class="fs-5 mb-1"></p>
-        <p id="role-line" class="text-muted mb-3">Rola: <strong id="role-display">nieznana</strong></p>
-        <hr class="task-divider">
-        <h2 id="task-heading" class="fs-6 text-uppercase text-muted fw-semibold letter-spacing mb-3">Zadanie</h2>
+    <main id="logged-view" class="w-100 text-center" style="display: none;">
+        <header class="page-header mb-4">
+            <button id="logout-btn" class="logout-icon-btn" type="button" title="Wyloguj" aria-label="Wyloguj">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+            </button>
+            <h1 class="page-title fw-bold">Impostor</h1>
+            <p id="greeting" class="fs-5 greeting mb-0"></p>
+        </header>
 
-        <div id="task-box" class="task-card p-3 mb-3" style="display:none; text-align:left;">
-            <div class="d-flex align-items-center gap-2 mb-1">
-                <span id="task-title" class="fw-bold fs-5"></span>
-                <span id="task-group-badge" class="badge" style="background:#2D3748; color:#FAF5E6; font-size:0.75rem;"></span>
+        <section class="role-card" aria-labelledby="role-heading">
+            <h2 id="role-heading" class="role-label mb-2">Twoja rola</h2>
+            <strong id="role-display" class="role-value"></strong>
+            <p id="role-unknown" class="text-muted mb-3">Rola nie została jeszcze przydzielona</p>
+            <button id="toggle-role-btn" class="btn role-toggle" type="button" hidden>Pokaż rolę</button>
+        </section>
+
+        <div class="mb-4">
+            <button id="ping-btn" class="btn btn-dark-custom px-5" type="button">Ping</button>
+            <p id="ping-msg" class="text-muted small mt-2 mb-0" style="min-height:1.25rem;"></p>
+        </div>
+
+        <section id="task-section" class="content-section" aria-labelledby="task-heading">
+            <h2 id="task-heading" class="section-heading">Zadanie</h2>
+            <div id="task-box" class="content-card mb-3" style="display:none;">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span id="task-title" class="fw-bold fs-5"></span>
+                    <span id="task-group-badge" class="badge" style="background:#2D3748; color:#FAF5E6; font-size:0.75rem;"></span>
+                </div>
+                <p id="task-description" class="text-muted mb-0" style="font-size:0.9rem;"></p>
             </div>
-            <p id="task-description" class="text-muted mb-0" style="font-size:0.9rem;"></p>
-        </div>
+        </section>
 
-        <p id="task-none" class="text-muted">brak</p>
+        <section id="challenge-section" class="content-section" aria-labelledby="challenge-heading">
+            <h2 id="challenge-heading" class="section-heading">Wyzwanie</h2>
+            <div id="challenge-box" class="content-card mb-3" style="display:none;">
+                <h3 id="challenge-title" class="fw-bold fs-5 mb-1"></h3>
+                <p id="challenge-description" class="text-muted mb-0" style="font-size:0.9rem;"></p>
+            </div>
+        </section>
 
-        <!-- WYZWANIE -->
-        <hr class="task-divider">
-        <h2 id="challenge-heading" class="fs-6 text-uppercase text-muted fw-semibold letter-spacing mb-3">Wyzwanie</h2>
-
-        <div id="challenge-box" class="task-card p-3 mb-3" style="display:none; text-align:left;">
-            <h3 id="challenge-title" class="fw-bold fs-5 mb-1"></h3>
-            <p id="challenge-description" class="text-muted mb-2" style="font-size:0.9rem;"></p>
-            <p class="mb-0" style="font-size:0.85rem;"><span class="fw-semibold">Nagroda:</span> <span id="challenge-reward" class="text-success"></span></p>
-        </div>
-        <p id="challenge-none" class="text-muted">brak</p>
-
-        <button id="logout-btn" class="btn btn-outline-secondary btn-sm mt-3">Wyloguj</button>
+        <section id="rewards-section" class="content-section" aria-labelledby="rewards-heading" hidden>
+            <h2 id="rewards-heading" class="section-heading">Nagrody</h2>
+            <div id="rewards-list" class="d-flex flex-column gap-3"></div>
+        </section>
     </main>
 
     <script src="config.js"></script>
     <script>
         const API = window.API_URL;
         let ws = null;
-        let pingInterval = null;
+        let heartbeat = null;
+        let reconnectTimer = null;
+        let reconnectDelay = 1000;
+        let lastPong = 0;
+        let roleIsVisible = false;
 
-        function getUser() { return localStorage.getItem("username"); }
-        function setUser(u) { localStorage.setItem("username", u); }
+        // Dane w localStorage służą tylko do szybkiego pierwszego wyświetlenia –
+        // źródłem prawdy jest serwer (GET /me), synchronizowany przy każdym (re)connect.
+        function getToken() { return localStorage.getItem("token"); }
+        function getUser() { return getToken() ? localStorage.getItem("username") : null; }
+        function setSession(username, token) {
+            localStorage.setItem("username", username);
+            localStorage.setItem("token", token);
+        }
         function clearUser() {
-            localStorage.removeItem("username");
-            localStorage.removeItem("role");
-            localStorage.removeItem("task");
-            localStorage.removeItem("challenge");
+            for (const key of ["username", "token", "role", "task", "challenge", "rewards"]) {
+                localStorage.removeItem(key);
+            }
+            roleIsVisible = false;
         }
         function getRole() { return localStorage.getItem("role"); }
-        function setRole(r) { localStorage.setItem("role", r); }
+        function setRole(r) {
+            if (getRole() !== r) roleIsVisible = false;
+            localStorage.setItem("role", r);
+            updateRoleDisplay();
+        }
         function getTask() { const t = localStorage.getItem("task"); return t ? JSON.parse(t) : null; }
         function setTask(t) { localStorage.setItem("task", JSON.stringify(t)); }
         function getChallenge() { const c = localStorage.getItem("challenge"); return c ? JSON.parse(c) : null; }
         function setChallenge(c) { localStorage.setItem("challenge", JSON.stringify(c)); }
+        function getRewards() { const r = localStorage.getItem("rewards"); return r ? JSON.parse(r) : []; }
+        function setRewards(r) { localStorage.setItem("rewards", JSON.stringify(r)); }
+
+        // Zapytanie z tokenem sesji; 401 oznacza wygasłą sesję lub usunięte konto.
+        async function apiFetch(path, options = {}) {
+            const res = await fetch(`${API}${path}`, {
+                ...options,
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${getToken()}`,
+                    ...(options.headers || {}),
+                },
+            });
+            if (res.status === 401) endSession("Sesja wygasła – zaloguj się ponownie");
+            return res;
+        }
+
+        function endSession(message) {
+            stopConnection();
+            clearUser();
+            render();
+            if (message) {
+                const errEl = document.getElementById("error-msg");
+                errEl.textContent = message;
+                errEl.style.display = "block";
+            }
+        }
+
+        function applyState(state) {
+            if (state.role) setRole(state.role); else localStorage.removeItem("role");
+            if (state.task) setTask(state.task); else localStorage.removeItem("task");
+            if (state.challenge) setChallenge(state.challenge); else localStorage.removeItem("challenge");
+            setRewards(state.rewards || []);
+            updateRoleDisplay();
+            showTask(getTask());
+            showChallenge(getChallenge());
+            showRewards();
+        }
+
+        async function syncState() {
+            try {
+                const res = await apiFetch("/me");
+                if (res.ok) applyState(await res.json());
+            } catch { /* brak sieci – spróbujemy przy następnym połączeniu */ }
+        }
+
+        function updateRoleDisplay() {
+            const role = getRole();
+            const roleDisplay = document.getElementById("role-display");
+            const roleUnknown = document.getElementById("role-unknown");
+            const toggleRoleButton = document.getElementById("toggle-role-btn");
+
+            roleDisplay.textContent = roleIsVisible ? role : "••••••";
+            roleDisplay.hidden = !role;
+            roleUnknown.hidden = Boolean(role);
+            toggleRoleButton.hidden = !role;
+            toggleRoleButton.textContent = roleIsVisible ? "Ukryj rolę" : "Pokaż rolę";
+        }
 
         function showTask(task) {
             const box = document.getElementById("task-box");
-            const none = document.getElementById("task-none");
-            if (!task) { box.style.display = "none"; none.style.display = ""; return; }
+            const section = document.getElementById("task-section");
+            if (!task) {
+                box.style.display = "none";
+                section.hidden = true;
+                return;
+            }
 
+            section.hidden = false;
             document.getElementById("task-title").textContent = task.title || task.quest_title || "";
             document.getElementById("task-description").textContent = task.description || task.quest_description || "";
 
@@ -125,73 +335,167 @@
             }
 
             box.style.display = "block";
-            none.style.display = "none";
         }
 
         function showChallenge(c) {
             const box = document.getElementById("challenge-box");
-            const none = document.getElementById("challenge-none");
-            if (!c) { box.style.display = "none"; none.style.display = ""; return; }
+            const section = document.getElementById("challenge-section");
+            if (!c) {
+                box.style.display = "none";
+                section.hidden = true;
+                return;
+            }
 
+            section.hidden = false;
             document.getElementById("challenge-title").textContent = c.title || "";
             document.getElementById("challenge-description").textContent = c.description || "";
-            document.getElementById("challenge-reward").textContent = c.reward || "";
 
             box.style.display = "block";
-            none.style.display = "none";
         }
 
-        function connectWebSocket(username) {
-            if (ws) { ws.close(); ws = null; }
-            clearInterval(pingInterval);
+        function showRewards() {
+            const rewards = getRewards();
+            const section = document.getElementById("rewards-section");
+            const list = document.getElementById("rewards-list");
+            list.replaceChildren();
+            section.hidden = rewards.length === 0;
 
-            ws = new WebSocket(`${window.WS_URL}/ws/${username}`);
+            for (const reward of rewards) {
+                const card = document.createElement("div");
+                card.className = "content-card d-flex align-items-center justify-content-between gap-3";
 
-            ws.onmessage = (event) => {
-                let msg;
-                try { msg = JSON.parse(event.data); } catch { return; }
+                const text = document.createElement("div");
+                const title = document.createElement("div");
+                title.className = "fw-bold";
+                title.textContent = reward.reward || "";
+                const source = document.createElement("div");
+                source.className = "text-muted";
+                source.style.fontSize = "0.85rem";
+                source.textContent = reward.challenge_title ? `Za: ${reward.challenge_title}` : "";
+                text.append(title, source);
 
-                if (msg.type === "kicked") {
-                    clearUser();
-                    ws.close(); ws = null;
-                    clearInterval(pingInterval);
-                    alert("Twoje konto zostało usunięte przez admina.");
-                    render();
-                } else if (msg.type === "role") {
-                    setRole(msg.role);
-                    document.getElementById("role-display").textContent = msg.role;
-                } else if (msg.type === "task") {
-                    setTask(msg);
-                    showTask(msg);
-                } else if (msg.type === "challenge") {
-                    setChallenge(msg.challenge);
-                    showChallenge(msg.challenge);
-                } else if (msg.type === "challenge_removed") {
-                    localStorage.removeItem("challenge");
-                    showChallenge(null);
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "btn btn-dark-custom btn-sm flex-shrink-0";
+                button.textContent = "Użyj";
+                button.addEventListener("click", () => useReward(reward, button));
+
+                card.append(text, button);
+                list.appendChild(card);
+            }
+        }
+
+        async function useReward(reward, button) {
+            if (!confirm(`Użyć nagrody "${reward.reward}"? Nagroda zniknie z listy.`)) return;
+            button.disabled = true;
+            try {
+                const res = await apiFetch(`/rewards/${reward.id}/use`, { method: "POST" });
+                if (res.status === 401) return;
+                // 404 oznacza, że nagroda została już użyta – również usuwamy ją z listy
+                if (!res.ok && res.status !== 404) {
+                    alert("Nie udało się użyć nagrody.");
+                    button.disabled = false;
+                    return;
                 }
-            };
+                setRewards(getRewards().filter(r => r.id !== reward.id));
+                showRewards();
+            } catch {
+                alert("Nie można połączyć z serwerem");
+                button.disabled = false;
+            }
+        }
 
-            ws.onclose = () => { ws = null; clearInterval(pingInterval); };
+        function stopConnection() {
+            clearTimeout(reconnectTimer);
+            clearInterval(heartbeat);
+            if (ws) { ws.onclose = null; ws.close(); ws = null; }
+        }
 
-            ws.onopen = () => {
-                pingInterval = setInterval(() => {
-                    if (ws && ws.readyState === WebSocket.OPEN) ws.send("ping");
+        function handleMessage(msg) {
+            if (msg.type === "kicked") {
+                endSession();
+                alert("Twoje konto zostało usunięte przez admina.");
+            } else if (msg.type === "role") {
+                setRole(msg.role);
+            } else if (msg.type === "task") {
+                setTask(msg);
+                showTask(msg);
+            } else if (msg.type === "challenge") {
+                setChallenge(msg.challenge);
+                showChallenge(msg.challenge);
+            } else if (msg.type === "challenge_removed") {
+                localStorage.removeItem("challenge");
+                showChallenge(null);
+            } else if (msg.type === "reward") {
+                const rewards = getRewards().filter(r => r.id !== msg.reward.id);
+                rewards.push(msg.reward);
+                setRewards(rewards);
+                showRewards();
+            }
+        }
+
+        // Połączenie jest odnawiane automatycznie (blokada telefonu, restart serwera,
+        // zmiana sieci), a po każdym połączeniu stan jest pobierany z serwera.
+        function connectWebSocket() {
+            stopConnection();
+            const token = getToken();
+            if (!token) return;
+
+            const socket = new WebSocket(`${window.WS_URL}/ws?token=${encodeURIComponent(token)}`);
+            ws = socket;
+
+            socket.onopen = () => {
+                reconnectDelay = 1000;
+                lastPong = Date.now();
+                syncState();
+                heartbeat = setInterval(() => {
+                    // Brak odpowiedzi serwera = martwe połączenie, którego przeglądarka jeszcze nie zauważyła
+                    if (Date.now() - lastPong > 50000) { connectWebSocket(); return; }
+                    if (socket.readyState === WebSocket.OPEN) socket.send("ping");
                 }, 20000);
             };
+
+            socket.onmessage = (event) => {
+                lastPong = Date.now();
+                let msg;
+                try { msg = JSON.parse(event.data); } catch { return; }
+                handleMessage(msg);
+            };
+
+            socket.onclose = (event) => {
+                if (ws !== socket) return;
+                ws = null;
+                clearInterval(heartbeat);
+                if (event.code === 4401) {
+                    endSession("Sesja wygasła – zaloguj się ponownie");
+                    return;
+                }
+                reconnectTimer = setTimeout(connectWebSocket, reconnectDelay);
+                reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+            };
         }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden || !getUser()) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
+            else syncState();
+        });
+        window.addEventListener("online", () => { if (getUser()) connectWebSocket(); });
 
         function render() {
             const user = getUser();
             if (user) {
+                document.body.classList.add("is-logged-in");
                 document.getElementById("login-view").style.display = "none";
                 document.getElementById("logged-view").style.display = "block";
                 document.getElementById("greeting").textContent = `Cześć, ${user}!`;
-                document.getElementById("role-display").textContent = getRole() || "nieznana";
+                updateRoleDisplay();
                 showTask(getTask());
                 showChallenge(getChallenge());
-                connectWebSocket(user);
+                showRewards();
+                connectWebSocket();
             } else {
+                document.body.classList.remove("is-logged-in");
                 document.getElementById("login-view").style.display = "block";
                 document.getElementById("logged-view").style.display = "none";
             }
@@ -217,19 +521,15 @@
                 });
 
                 if (!res.ok) {
-                    errEl.textContent = (await res.json()).detail || "Błąd logowania";
+                    const { detail } = await res.json().catch(() => ({}));
+                    errEl.textContent = typeof detail === "string" ? detail : "Błąd logowania";
                     errEl.style.display = "block";
                     return;
                 }
 
                 const data = await res.json();
-                setUser(data.username);
-                if (data.role) setRole(data.role);
-                else localStorage.removeItem("role");
-                if (data.task) setTask(data.task);
-                else localStorage.removeItem("task");
-                if (data.challenge) setChallenge(data.challenge);
-                else localStorage.removeItem("challenge");
+                setSession(data.username, data.token);
+                applyState(data);
                 render();
             } catch {
                 errEl.textContent = "Nie można połączyć z serwerem";
@@ -237,11 +537,28 @@
             }
         });
 
-        document.getElementById("logout-btn").addEventListener("click", () => {
-            if (ws) ws.close();
-            clearInterval(pingInterval);
-            clearUser();
-            render();
+        document.getElementById("logout-btn").addEventListener("click", () => endSession());
+
+        document.getElementById("toggle-role-btn").addEventListener("click", () => {
+            roleIsVisible = !roleIsVisible;
+            updateRoleDisplay();
+        });
+
+        document.getElementById("ping-btn").addEventListener("click", async () => {
+            const button = document.getElementById("ping-btn");
+            const msg = document.getElementById("ping-msg");
+            button.disabled = true;
+            try {
+                const res = await apiFetch("/ping", { method: "POST" });
+                msg.textContent = res.ok ? "Ping wysłany ✓" : "Nie udało się wysłać pinga";
+            } catch {
+                msg.textContent = "Nie można połączyć z serwerem";
+            }
+            // blokada chroni logi przed przypadkowym spamem
+            setTimeout(() => {
+                button.disabled = false;
+                msg.textContent = "";
+            }, 3000);
         });
 
         render();

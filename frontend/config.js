@@ -1,14 +1,19 @@
 // ─────────────────────────────────────────────────────────────
 //  Konfiguracja frontendu – impostor
-//  Zmień poniższe URL-e po deploymencie na Render.com
+//  Adres backendu wybierany jest automatycznie:
+//  lokalnie (localhost / plik .html) → backend lokalny, inaczej → Render.com
 // ─────────────────────────────────────────────────────────────
 
-// URL backendu (HTTP) – np. https://impostor-backend.onrender.com
-// Lokalnie: http://localhost:8000
-window.API_URL = "https://impostor-backend.onrender.com";
+(function () {
+    const PRODUCTION_API_URL = "https://impostor-backend.onrender.com";
+    const LOCAL_API_URL = "http://localhost:8000";
 
-// URL WebSocket – generowany automatycznie z API_URL
-// https:// → wss://   |   http:// → ws://
-window.WS_URL = window.API_URL
-    .replace(/^https:\/\//, "wss://")
-    .replace(/^http:\/\//, "ws://");
+    const isLocal = ["", "localhost", "127.0.0.1"].includes(window.location.hostname);
+    window.API_URL = isLocal ? LOCAL_API_URL : PRODUCTION_API_URL;
+
+    // URL WebSocket – generowany automatycznie z API_URL
+    // https:// → wss://   |   http:// → ws://
+    window.WS_URL = window.API_URL
+        .replace(/^https:\/\//, "wss://")
+        .replace(/^http:\/\//, "ws://");
+})();

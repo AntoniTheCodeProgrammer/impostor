@@ -144,6 +144,51 @@
         }
         td .btn-inline:hover { color: #2D3748; border-color: rgba(45, 55, 72, 0.38); }
 
+        /* Ping lamp */
+        .ping-lamp {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-left: 6px;
+            border-radius: 50%;
+            background: rgba(45, 55, 72, 0.15);
+            vertical-align: middle;
+        }
+        .ping-lamp.lit {
+            background: #ECC94B;
+            box-shadow: 0 0 0 3px rgba(236, 201, 75, 0.35), 0 0 10px 2px rgba(236, 201, 75, 0.8);
+            cursor: pointer;
+            animation: pingPulse 1s ease-in-out infinite;
+        }
+        @keyframes pingPulse { 50% { box-shadow: 0 0 0 5px rgba(236, 201, 75, 0.15), 0 0 14px 4px rgba(236, 201, 75, 0.9); } }
+
+        /* Activity log */
+        /* Activity log: widoczne maks. 4 wiersze, reszta pod scrollem */
+        .log-list {
+            --log-row-height: 2rem;
+            box-sizing: content-box;
+            list-style: none;
+            margin: 0 0 1.5rem;
+            padding: 0 0.75rem;
+            max-height: calc(3 * var(--log-row-height));
+            overflow-y: auto;
+            font-size: 0.85rem;
+            background: rgba(255, 255, 255, 0.55);
+            border: 1px solid rgba(45, 55, 72, 0.1);
+            border-radius: 10px;
+        }
+        .log-list li {
+            box-sizing: border-box;
+            height: var(--log-row-height);
+            line-height: calc(var(--log-row-height) - 1px);
+            border-bottom: 1px solid rgba(45, 55, 72, 0.08);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .log-list li:last-child { border-bottom: none; }
+        .log-time { color: #718096; font-size: 0.75rem; margin-right: 0.5rem; }
+
         /* Messages */
         .msg-success { font-size: 0.8rem; color: #2f855a; }
         .msg-error   { font-size: 0.8rem; color: #e53e3e; }
@@ -203,6 +248,8 @@
 
             <!-- LEFT: Gracze -->
             <div class="col-12 col-md-5">
+                <div class="section-label">Logi</div>
+                <ul id="log-list" class="log-list" aria-label="Logi"></ul>
                 <div class="section-label">Gracze</div>
                 <table class="table table-borderless" id="user-table">
                     <thead>
@@ -212,6 +259,7 @@
                             <th>Status</th>
                             <th>Grupa</th>
                             <th>Wyzwanie</th>
+                            <th>Nagrody</th>
                             <th>Akcja</th>
                         </tr>
                     </thead>
@@ -256,6 +304,15 @@
                             </div>
                             <p id="assign-msg" class="msg-success mt-2" style="display:none;"></p>
                             <p id="assign-err" class="msg-error mt-2" style="display:none;"></p>
+                            <hr style="border-color: rgba(45,55,72,0.1); margin: 1.2rem 0 1rem;">
+                            <div class="section-label">Przypisz role ręcznie</div>
+                            <div id="manual-slots"></div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <button id="manual-assign-btn" class="btn btn-primary-ghost btn-sm">✅ Zatwierdź przypisanie</button>
+                                <span class="small text-muted">Gracze bez wybranej roli dostaną rolę „Cywil”.</span>
+                            </div>
+                            <p id="manual-msg" class="msg-success mt-2" style="display:none;"></p>
+                            <p id="manual-err" class="msg-error mt-2" style="display:none;"></p>
                         </div>
 
                         <!-- Zadania -->
@@ -384,9 +441,33 @@
     <script>
         const API = window.API_URL;
 
-        function getAdmin() { return localStorage.getItem("admin_username"); }
-        function setAdmin(u) { localStorage.setItem("admin_username", u); }
-        function clearAdmin() { localStorage.removeItem("admin_username"); }
+        function getAdmin() {
+            return localStorage.getItem("admin_token") ? localStorage.getItem("admin_username") : null;
+        }
+        function setAdmin(username, token) {
+            localStorage.setItem("admin_username", username);
+            localStorage.setItem("admin_token", token);
+        }
+        function clearAdmin() {
+            localStorage.removeItem("admin_username");
+            localStorage.removeItem("admin_token");
+        }
+
+        // Każde zapytanie do /admin/* (poza logowaniem) dostaje token admina.
+        // Odpowiedź 401 = sesja wygasła → powrót do ekranu logowania.
+        const nativeFetch = window.fetch.bind(window);
+        window.fetch = async (url, options = {}) => {
+            const target = String(url);
+            if (!target.startsWith(`${API}/admin/`) || target.endsWith("/admin/login")) {
+                return nativeFetch(url, options);
+            }
+            const res = await nativeFetch(url, {
+                ...options,
+                headers: { ...(options.headers || {}), "X-Admin-Token": localStorage.getItem("admin_token") || "" },
+            });
+            if (res.status === 401) { clearAdmin(); render(); }
+            return res;
+        };
 
         // ── Tab switching ─────────────────────────────────────────────────────
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -406,39 +487,86 @@
             try {
                 const res = await fetch(`${API}/admin/users`);
                 const data = await res.json();
+                populateManualUsers(data.users);
                 tbody.innerHTML = "";
                 if (!data.users.length) {
-                    tbody.innerHTML = "<tr><td colspan='6'>Brak graczy.</td></tr>";
+                    tbody.innerHTML = "<tr><td colspan='7'>Brak graczy.</td></tr>";
                     return;
                 }
                 for (const user of data.users) {
+                    const rewards = (user.rewards || []).map(r =>
+                        r.used
+                            ? `<s class="text-muted">${escHtml(r.reward)}</s> (użyta)`
+                            : escHtml(r.reward)
+                    ).join("<br>") || "–";
+                    const name = escQ(user.username);
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
-                        <td>${user.username}</td>
-                        <td>${user.role ?? "nieznana"}</td>
-                        <td>${user.online ? "🟢" : "⚫"}</td>
+                        <td>${escHtml(user.username)}</td>
+                        <td>${escHtml(user.role ?? "nieznana")}</td>
+                        <td>${user.online ? "🟢" : "⚫"}<span class="ping-lamp${user.pinged ? " lit" : ""}" ${user.pinged ? `title="Gracz pingnął – kliknij, aby zgasić" onclick="clearPing('${name}')"` : ""}></span></td>
                         <td>${user.group_num ?? "–"}</td>
-                        <td>${user.challenge ?? "–"}</td>
+                        <td>${escHtml(user.challenge ?? "–")}</td>
+                        <td>${rewards}</td>
                         <td>
-                            <button class="btn-inline" onclick="deleteUser('${user.username}')">Usuń</button>
-                            ${user.challenge ? `<button class="btn-inline" onclick="deleteUserChallenge('${user.username}')">Usuń wyz.</button>` : ""}
+                            <button class="btn-inline" onclick="deleteUser('${name}')">Usuń</button>
+                            ${user.challenge ? `<button class="btn-inline" onclick="completeUserChallenge('${name}')">Wykonane</button>` : ""}
+                            ${user.challenge ? `<button class="btn-inline" onclick="deleteUserChallenge('${name}')">Usuń wyz.</button>` : ""}
                         </td>
                     `;
                     tbody.appendChild(tr);
                 }
-            } catch { tbody.innerHTML = "<tr><td colspan='6'>Błąd.</td></tr>"; }
+            } catch { tbody.innerHTML = "<tr><td colspan='7'>Błąd.</td></tr>"; }
+        }
+
+        async function clearPing(username) {
+            const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/clear-ping`, { method: "POST" });
+            if (res.ok) loadUsers();
+        }
+
+        // ── Logs ──────────────────────────────────────────────────────────────
+
+        function escHtml(s) {
+            return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+        }
+
+        function describeLog(log) {
+            const who = `<strong>${escHtml(log.username)}</strong>`;
+            if (log.action === "ping") return `${who} zpingował`;
+            if (log.action === "reward_used") return `${who} użył nagrody „${escHtml(log.detail)}”`;
+            return `${who} ${escHtml(log.action)} ${escHtml(log.detail)}`;
+        }
+
+        async function loadLogs() {
+            const list = document.getElementById("log-list");
+            try {
+                const res = await fetch(`${API}/admin/logs`);
+                const data = await res.json();
+                if (!data.logs.length) { list.innerHTML = "<li class='text-muted'>Brak wpisów.</li>"; return; }
+                list.innerHTML = data.logs.map(log => {
+                    const time = new Date(log.created_at).toLocaleString("pl-PL");
+                    return `<li><span class="log-time">${escHtml(time)}</span>${describeLog(log)}</li>`;
+                }).join("");
+            } catch { list.innerHTML = "<li class='text-muted'>Błąd.</li>"; }
+        }
+
+        async function completeUserChallenge(username) {
+            if (!confirm(`Zatwierdzić wykonanie wyzwania i przyznać nagrodę graczowi "${username}"?`)) return;
+            const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/complete-challenge`, { method: "POST" });
+            if (res.ok) loadUsers();
+            else alert("Błąd zatwierdzania wyzwania.");
         }
 
         async function deleteUser(username) {
             if (!confirm(`Usunąć "${username}"?`)) return;
-            const res = await fetch(`${API}/admin/users/${username}`, { method: "DELETE" });
+            const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
             if (res.ok) loadUsers();
             else alert("Błąd usuwania.");
         }
 
         async function deleteUserChallenge(username) {
             if (!confirm(`Usunąć wyzwanie graczowi "${username}"?`)) return;
-            const res = await fetch(`${API}/admin/users/${username}/challenge`, { method: "DELETE" });
+            const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/challenge`, { method: "DELETE" });
             if (res.ok) loadUsers();
             else alert("Błąd usuwania wyzwania.");
         }
@@ -450,7 +578,13 @@
             const res = await fetch(`${API}/admin/roles`);
             const data = await res.json();
             tbody.innerHTML = "";
+            populateManualRoles(data.roles);
             for (const role of data.roles) tbody.appendChild(makeRoleRow(role));
+        }
+
+        async function refreshManualRoles() {
+            const res = await fetch(`${API}/admin/roles`);
+            populateManualRoles((await res.json()).roles);
         }
 
         function makeRoleRow(role) {
@@ -462,8 +596,8 @@
 
         function renderRoleView(tr, role) {
             tr.innerHTML = `
-                <td>${role.name}</td>
-                <td>${role.description}</td>
+                <td>${escHtml(role.name)}</td>
+                <td>${escHtml(role.description)}</td>
                 <td>${role.count}</td>
                 <td>
                     <button class="btn-inline" onclick="editRoleRow(this,${role.id},'${escQ(role.name)}','${escQ(role.description)}',${role.count})">Edytuj</button>
@@ -473,8 +607,8 @@
 
         function renderRoleEdit(tr, id, name, description, count) {
             tr.innerHTML = `
-                <td><input class="form-control form-control-sm r-name" value="${escQ(name)}" style="width:90px"></td>
-                <td><input class="form-control form-control-sm r-desc" value="${escQ(description)}" style="width:180px"></td>
+                <td><input class="form-control form-control-sm r-name" value="${escHtml(name)}" style="width:90px"></td>
+                <td><input class="form-control form-control-sm r-desc" value="${escHtml(description)}" style="width:180px"></td>
                 <td><input class="form-control form-control-sm r-count" type="number" min="1" value="${count}" style="width:55px"></td>
                 <td>
                     <button class="btn-inline" onclick="saveRole(this,${id})">Zatwierdź</button>
@@ -497,12 +631,13 @@
             });
             if (!res.ok) { alert("Błąd zapisu."); return; }
             renderRoleView(tr, await res.json());
+            refreshManualRoles();
         }
 
         async function deleteRole(id, btn) {
             if (!confirm("Usunąć rolę?")) return;
             const res = await fetch(`${API}/admin/roles/${id}`, { method: "DELETE" });
-            if (res.ok) btn.closest("tr").remove();
+            if (res.ok) { btn.closest("tr").remove(); refreshManualRoles(); }
             else alert("Błąd.");
         }
 
@@ -534,6 +669,7 @@
             });
             if (!res.ok) { alert((await res.json()).detail || "Błąd."); return; }
             renderRoleView(tr, await res.json());
+            refreshManualRoles();
         }
 
         document.getElementById("assign-btn").addEventListener("click", async () => {
@@ -548,6 +684,106 @@
             loadUsers();
         });
 
+        // ── Manual role assignment ────────────────────────────────────────────
+
+        let manualRoles = [];
+        let manualUsers = null;
+        const manualSel = {};
+
+        function renderManualSlots() {
+            const box = document.getElementById("manual-slots");
+            if (manualUsers === null) return;
+            const names = manualUsers.map(u => u.username);
+            box.innerHTML = "";
+            if (!manualRoles.length) { box.textContent = "Brak ról – dodaj je powyżej."; return; }
+
+            for (const role of manualRoles) {
+                let slots = manualSel[role.name];
+                if (!slots) {
+                    slots = manualUsers.filter(u => u.role === role.name).map(u => u.username);
+                }
+                slots = slots.filter(u => names.includes(u)).slice(0, role.count);
+                while (slots.length < role.count) slots.push("");
+                manualSel[role.name] = slots;
+            }
+            for (const key of Object.keys(manualSel)) {
+                if (!manualRoles.some(r => r.name === key)) delete manualSel[key];
+            }
+            const taken = new Set(Object.values(manualSel).flat().filter(Boolean));
+
+            for (const role of manualRoles) {
+                const slots = manualSel[role.name];
+                const card = document.createElement("div");
+                card.className = "mb-3";
+                const title = document.createElement("div");
+                title.className = "fw-bold";
+                title.textContent = `${role.name} (${slots.filter(Boolean).length}/${role.count})`;
+                card.appendChild(title);
+                if (role.description) {
+                    const d = document.createElement("div");
+                    d.className = "small text-muted mb-1";
+                    d.textContent = role.description;
+                    card.appendChild(d);
+                }
+                const row = document.createElement("div");
+                row.className = "d-flex flex-wrap gap-2";
+                slots.forEach((current, i) => {
+                    const sel = document.createElement("select");
+                    sel.className = "form-select form-select-sm";
+                    sel.style.width = "auto";
+                    const empty = document.createElement("option");
+                    empty.value = "";
+                    empty.textContent = "— wybierz gracza —";
+                    sel.appendChild(empty);
+                    for (const n of names) {
+                        if (taken.has(n) && n !== current) continue;
+                        const o = document.createElement("option");
+                        o.value = o.textContent = n;
+                        sel.appendChild(o);
+                    }
+                    sel.value = current;
+                    sel.addEventListener("change", () => {
+                        manualSel[role.name][i] = sel.value;
+                        renderManualSlots();
+                    });
+                    row.appendChild(sel);
+                });
+                card.appendChild(row);
+                box.appendChild(card);
+            }
+        }
+
+        function populateManualUsers(users) {
+            const changed = manualUsers === null ||
+                manualUsers.map(u => u.username).join("\n") !== users.map(u => u.username).join("\n");
+            manualUsers = users;
+            if (changed) renderManualSlots();
+        }
+
+        function populateManualRoles(roles) {
+            manualRoles = roles;
+            renderManualSlots();
+        }
+
+        document.getElementById("manual-assign-btn").addEventListener("click", async () => {
+            const msg = document.getElementById("manual-msg");
+            const err = document.getElementById("manual-err");
+            msg.style.display = err.style.display = "none";
+            const assignments = {};
+            for (const [role, slots] of Object.entries(manualSel)) {
+                for (const u of slots) if (u) assignments[u] = role;
+            }
+            const res = await fetch(`${API}/admin/assign-roles-manual`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ assignments }),
+            });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
+            msg.textContent = "Przypisano: " + Object.entries(data.assignments).map(([u, r]) => `${u}→${r}`).join(", ");
+            msg.style.display = "block";
+            loadUsers();
+        });
+
         // ── Quests ────────────────────────────────────────────────────────────
 
         let questsCache = [];
@@ -555,7 +791,7 @@
         function populateQuestSelect() {
             const sel = document.getElementById("quest-select");
             sel.innerHTML = questsCache.length
-                ? questsCache.map(q => `<option value="${q.id}">${q.title}</option>`).join("")
+                ? questsCache.map(q => `<option value="${q.id}">${escHtml(q.title)}</option>`).join("")
                 : '<option value="">Brak zadań</option>';
         }
 
@@ -578,8 +814,8 @@
 
         function renderQuestView(tr, q) {
             tr.innerHTML = `
-                <td>${q.title}</td>
-                <td>${q.description}</td>
+                <td>${escHtml(q.title)}</td>
+                <td>${escHtml(q.description)}</td>
                 <td>${q.num_groups ?? 1}</td>
                 <td>
                     <button class="btn-inline" onclick="editQuest(this,${q.id},'${escQ(q.title)}','${escQ(q.description)}',${q.num_groups ?? 1})">Edytuj</button>
@@ -589,8 +825,8 @@
 
         function renderQuestEdit(tr, id, title, description, numGroups) {
             tr.innerHTML = `
-                <td><input class="form-control form-control-sm q-title" value="${escQ(title)}" style="width:120px"></td>
-                <td><input class="form-control form-control-sm q-desc" value="${escQ(description)}" style="width:170px"></td>
+                <td><input class="form-control form-control-sm q-title" value="${escHtml(title)}" style="width:120px"></td>
+                <td><input class="form-control form-control-sm q-desc" value="${escHtml(description)}" style="width:170px"></td>
                 <td><input class="form-control form-control-sm q-groups" type="number" min="1" value="${numGroups}" style="width:55px"></td>
                 <td>
                     <button class="btn-inline" onclick="saveQuest(this,${id})">Zatwierdź</button>
@@ -697,9 +933,9 @@
         function renderChallengeView(tr, c) {
             tr.innerHTML = `
                 <td><input class="form-check-input ch-check" type="checkbox" value="${c.id}"></td>
-                <td>${c.title}</td>
-                <td>${c.description}</td>
-                <td>${c.reward}</td>
+                <td>${escHtml(c.title)}</td>
+                <td>${escHtml(c.description)}</td>
+                <td>${escHtml(c.reward)}</td>
                 <td>
                     <button class="btn-inline" onclick="editChallenge(this,${c.id},'${escQ(c.title)}','${escQ(c.description)}','${escQ(c.reward)}')">Edytuj</button>
                     <button class="btn-inline" onclick="deleteChallenge(${c.id},this)">Usuń</button>
@@ -709,9 +945,9 @@
         function renderChallengeEdit(tr, id, title, description, reward) {
             tr.innerHTML = `
                 <td><input class="form-check-input ch-check" type="checkbox" value="${id}" disabled></td>
-                <td><input class="form-control form-control-sm c-title" value="${escQ(title)}" style="width:100px"></td>
-                <td><input class="form-control form-control-sm c-desc" value="${escQ(description)}" style="width:150px"></td>
-                <td><input class="form-control form-control-sm c-reward" value="${escQ(reward)}" style="width:100px"></td>
+                <td><input class="form-control form-control-sm c-title" value="${escHtml(title)}" style="width:100px"></td>
+                <td><input class="form-control form-control-sm c-desc" value="${escHtml(description)}" style="width:150px"></td>
+                <td><input class="form-control form-control-sm c-reward" value="${escHtml(reward)}" style="width:100px"></td>
                 <td>
                     <button class="btn-inline" onclick="saveChallenge(this,${id})">Zatwierdź</button>
                     <button class="btn-inline" onclick="cancelChallenge(this,${id},'${escQ(title)}','${escQ(description)}','${escQ(reward)}')">Anuluj</button>
@@ -800,7 +1036,10 @@
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
-        function escQ(s) { return String(s).replace(/'/g, "\'").replace(/"/g, "&quot;"); }
+        // Argument tekstowy w atrybucie onclick="fn('${escQ(x)}')": najpierw ucieczka literału JS, potem HTML
+        function escQ(s) {
+            return escHtml(String(s ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/[\r\n]+/g, " "));
+        }
 
         // ── Render / init ─────────────────────────────────────────────────────
 
@@ -813,6 +1052,7 @@
                 adminView.classList.remove("d-none");
                 document.getElementById("admin-name").textContent = admin;
                 loadUsers();
+                loadLogs();
                 loadRoles();
                 loadQuests();
                 loadChallenges();
@@ -834,16 +1074,24 @@
                     body: JSON.stringify({ username, password }),
                 });
                 const data = await res.json();
-                if (!res.ok) { errEl.textContent = data.detail; errEl.style.display = "block"; return; }
-                setAdmin(data.username);
+                if (!res.ok) {
+                    errEl.textContent = typeof data.detail === "string" ? data.detail : "Błąd logowania";
+                    errEl.style.display = "block";
+                    return;
+                }
+                setAdmin(data.username, data.token);
                 render();
             } catch { errEl.textContent = "Brak połączenia"; errEl.style.display = "block"; }
         });
 
         document.getElementById("logout-btn").addEventListener("click", () => { clearAdmin(); render(); });
-        document.getElementById("refresh-btn").addEventListener("click", loadUsers);
+        document.getElementById("refresh-btn").addEventListener("click", () => { loadUsers(); loadLogs(); });
 
-        setInterval(() => { if (getAdmin()) loadUsers(); }, 5000);
+        // Odświeżanie tylko gdy karta jest widoczna – zbędne zapytania w tle obciążają serwer
+        setInterval(() => { if (getAdmin() && !document.hidden) { loadUsers(); loadLogs(); } }, 5000);
+        document.addEventListener("visibilitychange", () => {
+            if (getAdmin() && !document.hidden) { loadUsers(); loadLogs(); }
+        });
 
         render();
     </script>

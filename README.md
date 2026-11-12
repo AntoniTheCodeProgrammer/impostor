@@ -53,13 +53,18 @@ uvicorn main:app --reload
 
 Backend startuje na `http://localhost:8000`.
 
+Ustaw w `.env` także własny `ADMIN_SEED_SECRET` (do założenia konta admina):
+
+```bash
+curl -X POST http://localhost:8000/admin/seed \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "twoje-haslo", "secret": "<twój ADMIN_SEED_SECRET>"}'
+```
+
 ### 4. Uruchom frontend lokalnie
 
-W pliku `frontend/config.js` zmień URL na localhost:
-
-```js
-window.API_URL = "http://localhost:8000";
-```
+Adres backendu wybierany jest automatycznie (`localhost` → `http://localhost:8000`),
+więc nie trzeba nic zmieniać w `frontend/config.js`.
 
 Otwórz pliki przez dowolny serwer statyczny, np.:
 ```bash
@@ -99,7 +104,8 @@ Jeśli już masz serwis, upewnij się że te wartości są ustawione:
 |---|---|
 | `TURSO_DATABASE_URL` | `libsql://impostor-antonithecodeprogrammer.aws-eu-west-1.turso.io` |
 | `TURSO_AUTH_TOKEN` | ← **TOKEN Z TURSO – WYMAGANY!** bez niego deploy nie wystartuje |
-| `ADMIN_SEED_SECRET` | `impostor-secret` |
+| `ADMIN_SEED_SECRET` | ← **własny, długi sekret** (nie `impostor-secret` – ta wartość jest publiczna i jest odrzucana). Potrzebny tylko do założenia konta admina |
+| `TOKEN_SECRET` | *(opcjonalnie)* klucz podpisujący sesje. Bez niego jest wyliczany z `TURSO_AUTH_TOKEN` |
 
 #### Jak zdobyć TURSO_AUTH_TOKEN
 1. Zaloguj się na [app.turso.tech](https://app.turso.tech)
@@ -112,18 +118,21 @@ Jeśli już masz serwis, upewnij się że te wartości są ustawione:
 ```bash
 curl -X POST https://impostor-backend.onrender.com/admin/seed \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "twoje-haslo", "secret": "impostor-secret"}'
+  -d '{"username": "admin", "password": "twoje-haslo", "secret": "<wartość ADMIN_SEED_SECRET z Render>"}'
 ```
+
+Wszystkie endpointy `/admin/*` wymagają zalogowania (token admina), a gracze
+komunikują się z serwerem przez token sesji – sama znajomość nazwy gracza nie wystarcza.
 
 ### Krok 3 – Frontend na serwer hostingowy
 
-1. Otwórz plik `frontend/config.js` i podmień URL backendu na adres z Render:
+1. Adres backendu wybierany jest automatycznie w `frontend/config.js`: lokalnie
+   (`localhost` / plik `.html`) używany jest `http://localhost:8000`, na serwerze
+   hostingowym adres z Render. Jeśli Twój backend ma inny adres niż
+   `https://impostor-backend.onrender.com`, zmień stałą `PRODUCTION_API_URL`
+   w tym pliku.
 
-```js
-window.API_URL = "https://twoj-backend.onrender.com";
-```
-
-Plik `WS_URL` generuje się automatycznie (`https://` → `wss://`).
+   `WS_URL` generuje się automatycznie (`https://` → `wss://`).
 
 2. Wgraj trzy pliki na serwer hostingowy:
    - `frontend/index.html`
@@ -147,7 +156,7 @@ impostor/
 ├── frontend/
 │   ├── index.html           # Panel gracza
 │   ├── admin.html           # Panel Mistrza Gry
-│   └── config.js            # ← JEDYNE miejsce gdzie podajesz URL backendu
+│   └── config.js            # ← JEDYNE miejsce gdzie podajesz URL backendu (wybierany automatycznie)
 ├── render.yaml              # Konfiguracja Render.com
 ├── .gitignore
 └── README.md

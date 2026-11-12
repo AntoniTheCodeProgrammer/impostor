@@ -11,4 +11,4 @@ services:
       - key: TURSO_AUTH_TOKEN
         sync: false          # wpisz ręcznie w panelu Render.com
       - key: ADMIN_SEED_SECRET
-        value: impostor-secret
+        sync: false          # wpisz ręcznie w panelu Render.com – własny, długi sekret
