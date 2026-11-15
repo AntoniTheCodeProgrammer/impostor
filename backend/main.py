@@ -24,7 +24,7 @@ load_dotenv()
 
 # Lokalnie: TURSO_DATABASE_URL może wskazywać na plik (file:users.db)
 # Na Render.com: libsql://impostor-antonithecodeprogrammer.aws-eu-west-1.turso.io
-TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "file:users.db")
+TURSO_URL   = os.environ.get("TURSO_DATABASE_URL") or "file:users.db"
 TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
 
 # Sekret do założenia pierwszego konta admina. Dawna wartość domyślna była
@@ -60,6 +60,8 @@ USERNAME_RE = re.compile(r"^[\w .\-]{1,24}$")
 # Active WebSocket connections: username -> set of WebSockets (np. kilka kart)
 active_connections: dict[str, set[WebSocket]] = {}
 _last_ping: dict[str, float] = {}
+# Połączenia panelu admina – dostają zmiany graczy i logów zamiast odpytywania
+active_admin_connections: set[WebSocket] = set()
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -292,6 +294,79 @@ async def send_to(username: str, payload: dict):
             _drop_connection(username, ws)
 
 
+async def broadcast_admin(payload: dict):
+    text = json.dumps(payload)
+    for ws in list(active_admin_connections):
+        try:
+            await ws.send_text(text)
+        except Exception:
+            active_admin_connections.discard(ws)
+
+
+def _in_clause(column: str, usernames: list[str] | None) -> tuple[str, list]:
+    if usernames is None:
+        return "", []
+    return f" WHERE {column} IN ({','.join('?' * len(usernames))})", list(usernames)
+
+
+async def admin_user_rows(client, usernames: list[str] | None = None) -> list[dict]:
+    """Gracze w formacie panelu admina; usernames=None oznacza wszystkich graczy."""
+    if usernames is not None and not usernames:
+        return []
+    u_where, u_args = _in_clause("u.username", usernames)
+    r_where, r_args = _in_clause("username", usernames)
+    result, rewards_result, pings_result = await client.batch([
+        ("SELECT u.username, u.role, u.challenge_id, ut.group_num, c.title as challenge_title "
+         "FROM users u "
+         "LEFT JOIN user_tasks ut ON u.username = ut.username "
+         "LEFT JOIN challenges c ON u.challenge_id = c.id" + u_where, u_args),
+        ("SELECT username, reward, used FROM user_rewards" + r_where + " ORDER BY id", r_args),
+        ("SELECT username FROM user_pings" + r_where, r_args),
+    ])
+    pinged = {row[0] for row in pings_result.rows}
+    rewards_by_user: dict[str, list[dict]] = {}
+    for row in rewards_result.rows:
+        rw = row_to_dict(rewards_result.columns, row)
+        rewards_by_user.setdefault(rw["username"], []).append(
+            {"reward": rw["reward"], "used": bool(rw["used"])}
+        )
+    users = []
+    for row in result.rows:
+        r = row_to_dict(result.columns, row)
+        users.append({
+            "username": r["username"],
+            "role": r["role"],
+            "online": r["username"] in active_connections,
+            "group_num": r["group_num"],
+            "challenge": r["challenge_title"],
+            "rewards": rewards_by_user.get(r["username"], []),
+            "pinged": r["username"] in pinged,
+        })
+    return users
+
+
+async def publish_users(usernames: list[str]):
+    """Wysyła adminom aktualny stan wskazanych graczy. Gracze, których już nie ma, trafiają do users_removed."""
+    usernames = list(dict.fromkeys(usernames))
+    if not usernames or not active_admin_connections:
+        return
+    async with get_client() as client:
+        users = await admin_user_rows(client, usernames)
+    if users:
+        await broadcast_admin({"type": "users_upsert", "users": users})
+    found = {u["username"] for u in users}
+    missing = [name for name in usernames if name not in found]
+    if missing:
+        await broadcast_admin({"type": "users_removed", "usernames": missing})
+
+
+async def publish_log(log_id: int, created_at: str, username: str, action: str, detail: str):
+    await broadcast_admin({"type": "log", "log": {
+        "id": log_id, "created_at": created_at, "username": username,
+        "action": action, "detail": detail,
+    }})
+
+
 async def build_state(client, username: str) -> dict | None:
     """Stan gracza (rola, zadanie, wyzwanie bez nagrody, nagrody) jednym zapytaniem."""
     user_rs, task_rs, challenge_rs, rewards_rs = await client.batch([
@@ -322,10 +397,12 @@ def now_iso() -> str:
 
 
 async def add_log(client, username: str, action: str, detail: str = ""):
-    await client.execute(
+    created_at = now_iso()
+    result = await client.execute(
         "INSERT INTO activity_log (created_at, username, action, detail) VALUES (?, ?, ?, ?)",
-        [now_iso(), username, action, detail],
+        [created_at, username, action, detail],
     )
+    await publish_log(result.last_insert_rowid, created_at, username, action, detail)
 
 
 # ── User endpoints ────────────────────────────────────────────────────────────
@@ -355,6 +432,7 @@ async def login(data: LoginRequest):
                     raise HTTPException(status_code=409, detail="Nazwa jest już zajęta")
                 raise
             status = "registered"
+            await publish_users([username])
         else:
             ok, needs_upgrade = await verify_pw_async(result.rows[0][0], data.password)
             if not ok:
@@ -401,6 +479,7 @@ async def use_reward(reward_id: int, username: str = Depends(current_user)):
         if updated.rows_affected == 0:
             raise HTTPException(status_code=404, detail="Nagroda nie istnieje lub została już użyta")
         await add_log(client, username, "reward_used", found.rows[0][0])
+    await publish_users([username])
     return {"status": "used", "id": reward_id}
 
 
@@ -417,13 +496,16 @@ async def ping(username: str = Depends(current_user)):
         )
         if not exists.rows:
             raise HTTPException(status_code=401, detail="Konto zostało usunięte")
-        await client.batch([
+        ts = now_iso()
+        _, log_result = await client.batch([
             ("INSERT INTO user_pings (username, pinged_at) VALUES (?, ?) "
              "ON CONFLICT(username) DO UPDATE SET pinged_at = excluded.pinged_at",
-             [username, now_iso()]),
+             [username, ts]),
             ("INSERT INTO activity_log (created_at, username, action, detail) VALUES (?, ?, 'ping', '')",
-             [now_iso(), username]),
+             [ts, username]),
         ])
+    await publish_log(log_result.last_insert_rowid, ts, username, "ping", "")
+    await publish_users([username])
     return {"status": "pinged"}
 
 
@@ -448,7 +530,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
         await websocket.close(code=4401)
         return
 
+    went_online = username not in active_connections
     active_connections.setdefault(username, set()).add(websocket)
+    if went_online:
+        await publish_users([username])
     try:
         while True:
             await websocket.receive_text()
@@ -459,6 +544,26 @@ async def websocket_endpoint(websocket: WebSocket, token: str = ""):
         pass
     finally:
         _drop_connection(username, websocket)
+        if username not in active_connections:
+            await publish_users([username])
+
+
+@app.websocket("/ws/admin")
+async def admin_websocket_endpoint(websocket: WebSocket, token: str = ""):
+    await websocket.accept()
+    if read_token(token, "admin") is None:
+        await websocket.close(code=4401)
+        return
+
+    active_admin_connections.add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+            await websocket.send_text(json.dumps({"type": "pong"}))
+    except Exception:
+        pass
+    finally:
+        active_admin_connections.discard(websocket)
 
 
 # ── Admin – login ─────────────────────────────────────────────────────────────
@@ -490,33 +595,7 @@ async def admin_login(data: LoginRequest):
 @app.get("/admin/users")
 async def list_users():
     async with get_client() as client:
-        result, rewards_result, pings_result = await client.batch([
-            "SELECT u.username, u.role, u.challenge_id, ut.group_num, c.title as challenge_title "
-            "FROM users u "
-            "LEFT JOIN user_tasks ut ON u.username = ut.username "
-            "LEFT JOIN challenges c ON u.challenge_id = c.id",
-            "SELECT username, reward, used FROM user_rewards ORDER BY id",
-            "SELECT username FROM user_pings",
-        ])
-    pinged = {row[0] for row in pings_result.rows}
-    rewards_by_user: dict[str, list[dict]] = {}
-    for row in rewards_result.rows:
-        rw = row_to_dict(rewards_result.columns, row)
-        rewards_by_user.setdefault(rw["username"], []).append(
-            {"reward": rw["reward"], "used": bool(rw["used"])}
-        )
-    users = []
-    for row in result.rows:
-        r = row_to_dict(result.columns, row)
-        users.append({
-            "username": r["username"],
-            "role": r["role"],
-            "online": r["username"] in active_connections,
-            "group_num": r["group_num"],
-            "challenge": r["challenge_title"],
-            "rewards": rewards_by_user.get(r["username"], []),
-            "pinged": r["username"] in pinged,
-        })
+        users = await admin_user_rows(client)
     return {"users": users}
 
 
@@ -524,6 +603,7 @@ async def list_users():
 async def clear_ping(username: str):
     async with get_client() as client:
         await client.execute("DELETE FROM user_pings WHERE username = ?", [username])
+    await publish_users([username])
     return {"status": "cleared"}
 
 
@@ -560,6 +640,7 @@ async def delete_user(username: str):
         except Exception:
             pass
 
+    await publish_users([username])
     return {"status": "deleted", "username": username}
 
 
@@ -573,6 +654,7 @@ async def delete_user_challenge(username: str):
         raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
 
     await send_to(username, {"type": "challenge_removed"})
+    await publish_users([username])
     return {"status": "deleted"}
 
 
@@ -596,6 +678,7 @@ async def complete_user_challenge(username: str):
     reward = row_to_dict(created.columns, created.rows[0])
     await send_to(username, {"type": "challenge_removed"})
     await send_to(username, {"type": "reward", "reward": reward})
+    await publish_users([username])
     return {"status": "completed", "reward": reward}
 
 
@@ -690,6 +773,7 @@ async def save_roles(assignments: dict[str, str]):
 
     for username, role in assignments.items():
         await send_to(username, {"type": "role", "role": role})
+    await publish_users(list(assignments))
 
 
 @app.post("/admin/assign-roles-manual")
@@ -791,6 +875,9 @@ async def update_challenge(challenge_id: int, data: ChallengeBody):
         )
     if result.rows_affected == 0:
         raise HTTPException(status_code=404, detail="Wyzwanie nie istnieje")
+    async with get_client() as client:
+        holders = await client.execute("SELECT username FROM users WHERE challenge_id=?", [challenge_id])
+    await publish_users([row[0] for row in holders.rows])
     return {"id": challenge_id, **data.model_dump()}
 
 
@@ -810,6 +897,7 @@ async def delete_challenge(challenge_id: int):
     # Gracze, którzy mieli to wyzwanie, od razu przestają je widzieć
     for row in holders.rows:
         await send_to(row[0], {"type": "challenge_removed"})
+    await publish_users([row[0] for row in holders.rows])
     return {"status": "deleted"}
 
 
@@ -859,6 +947,7 @@ async def activate_task(req: ActivateTaskRequest):
             "num_groups": num_groups,
         })
 
+    await publish_users(users)
     return {
         "status": "ok",
         "quest": quest["title"],
@@ -901,6 +990,7 @@ async def draw_challenges(req: DrawChallengesRequest):
 
     for a in assignments:
         await send_to(a["username"], {"type": "challenge", "challenge": public_challenge(a["challenge"])})
+    await publish_users([a["username"] for a in assignments])
 
     return {
         "status": "ok",

@@ -482,18 +482,33 @@
 
         // ── Users ─────────────────────────────────────────────────────────────
 
+        // Stan trzymany lokalnie: pełny odczyt przy połączeniu, potem zmiany przychodzą zdarzeniami z WebSocketu
+        const usersState = new Map();
+        const LOGS_LIMIT = 200;
+        const logsState = [];
+
         async function loadUsers() {
             const tbody = document.getElementById("user-list");
             try {
                 const res = await fetch(`${API}/admin/users`);
                 const data = await res.json();
-                populateManualUsers(data.users);
+                usersState.clear();
+                for (const user of data.users) usersState.set(user.username, user);
+                renderUsers();
+            } catch { tbody.innerHTML = "<tr><td colspan='7'>Błąd.</td></tr>"; }
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById("user-list");
+            try {
+                const users = [...usersState.values()];
+                populateManualUsers(users);
                 tbody.innerHTML = "";
-                if (!data.users.length) {
+                if (!users.length) {
                     tbody.innerHTML = "<tr><td colspan='7'>Brak graczy.</td></tr>";
                     return;
                 }
-                for (const user of data.users) {
+                for (const user of users) {
                     const rewards = (user.rewards || []).map(r =>
                         r.used
                             ? `<s class="text-muted">${escHtml(r.reward)}</s> (użyta)`
@@ -520,8 +535,7 @@
         }
 
         async function clearPing(username) {
-            const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/clear-ping`, { method: "POST" });
-            if (res.ok) loadUsers();
+            await fetch(`${API}/admin/users/${encodeURIComponent(username)}/clear-ping`, { method: "POST" });
         }
 
         // ── Logs ──────────────────────────────────────────────────────────────
@@ -538,37 +552,47 @@
         }
 
         async function loadLogs() {
-            const list = document.getElementById("log-list");
             try {
                 const res = await fetch(`${API}/admin/logs`);
                 const data = await res.json();
-                if (!data.logs.length) { list.innerHTML = "<li class='text-muted'>Brak wpisów.</li>"; return; }
-                list.innerHTML = data.logs.map(log => {
-                    const time = new Date(log.created_at).toLocaleString("pl-PL");
-                    return `<li><span class="log-time">${escHtml(time)}</span>${describeLog(log)}</li>`;
-                }).join("");
-            } catch { list.innerHTML = "<li class='text-muted'>Błąd.</li>"; }
+                logsState.length = 0;
+                logsState.push(...data.logs);
+                renderLogs();
+            } catch { document.getElementById("log-list").innerHTML = "<li class='text-muted'>Błąd.</li>"; }
+        }
+
+        function renderLogs() {
+            const list = document.getElementById("log-list");
+            if (!logsState.length) { list.innerHTML = "<li class='text-muted'>Brak wpisów.</li>"; return; }
+            list.innerHTML = logsState.map(log => {
+                const time = new Date(log.created_at).toLocaleString("pl-PL");
+                return `<li><span class="log-time">${escHtml(time)}</span>${describeLog(log)}</li>`;
+            }).join("");
+        }
+
+        function addLog(log) {
+            if (logsState.some(l => l.id === log.id)) return;
+            logsState.unshift(log);
+            if (logsState.length > LOGS_LIMIT) logsState.length = LOGS_LIMIT;
+            renderLogs();
         }
 
         async function completeUserChallenge(username) {
             if (!confirm(`Zatwierdzić wykonanie wyzwania i przyznać nagrodę graczowi "${username}"?`)) return;
             const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/complete-challenge`, { method: "POST" });
-            if (res.ok) loadUsers();
-            else alert("Błąd zatwierdzania wyzwania.");
+            if (!res.ok) alert("Błąd zatwierdzania wyzwania.");
         }
 
         async function deleteUser(username) {
             if (!confirm(`Usunąć "${username}"?`)) return;
             const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
-            if (res.ok) loadUsers();
-            else alert("Błąd usuwania.");
+            if (!res.ok) alert("Błąd usuwania.");
         }
 
         async function deleteUserChallenge(username) {
             if (!confirm(`Usunąć wyzwanie graczowi "${username}"?`)) return;
             const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/challenge`, { method: "DELETE" });
-            if (res.ok) loadUsers();
-            else alert("Błąd usuwania wyzwania.");
+            if (!res.ok) alert("Błąd usuwania wyzwania.");
         }
 
         // ── Roles ─────────────────────────────────────────────────────────────
@@ -681,7 +705,6 @@
             if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
             msg.textContent = "Wylosowano: " + Object.entries(data.assignments).map(([u, r]) => `${u}→${r}`).join(", ");
             msg.style.display = "block";
-            loadUsers();
         });
 
         // ── Manual role assignment ────────────────────────────────────────────
@@ -781,7 +804,6 @@
             if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
             msg.textContent = "Przypisano: " + Object.entries(data.assignments).map(([u, r]) => `${u}→${r}`).join(", ");
             msg.style.display = "block";
-            loadUsers();
         });
 
         // ── Quests ────────────────────────────────────────────────────────────
@@ -910,7 +932,6 @@
             if (!res.ok) { err.textContent = data.detail; err.style.display = "block"; return; }
             msg.textContent = `Aktywowano "${data.quest}" dla ${data.assignments.length} graczy.`;
             msg.style.display = "block";
-            loadUsers();
         });
 
         // ── Challenges ────────────────────────────────────────────────────────
@@ -1031,7 +1052,6 @@
             
             msg.textContent = `Rozlosowano wyzwania dla ${data.assignments.length} graczy.`;
             msg.style.display = "block";
-            loadUsers();
         });
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -1039,6 +1059,89 @@
         // Argument tekstowy w atrybucie onclick="fn('${escQ(x)}')": najpierw ucieczka literału JS, potem HTML
         function escQ(s) {
             return escHtml(String(s ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/[\r\n]+/g, " "));
+        }
+
+        // ── Live updates (WebSocket) ──────────────────────────────────────────
+
+        // Przy każdym (ponownym) połączeniu pobieramy pełny stan przez HTTP.
+        // Zdarzenia przychodzące w trakcie pobierania są kolejkowane i odtwarzane po nim.
+        let adminWs = null;
+        let adminHeartbeat = null;
+        let adminReconnectTimer = null;
+        let adminReconnectDelay = 1000;
+        let adminLastMsg = 0;
+        let adminQueue = null;
+
+        function stopAdminSocket() {
+            clearInterval(adminHeartbeat);
+            clearTimeout(adminReconnectTimer);
+            adminQueue = null;
+            if (adminWs) {
+                const socket = adminWs;
+                adminWs = null;
+                socket.onclose = socket.onmessage = null;
+                socket.close();
+            }
+        }
+
+        function connectAdminSocket() {
+            stopAdminSocket();
+            const token = localStorage.getItem("admin_token");
+            if (!token) return;
+
+            const socket = new WebSocket(`${window.WS_URL}/ws/admin?token=${encodeURIComponent(token)}`);
+            adminWs = socket;
+
+            socket.onopen = async () => {
+                adminReconnectDelay = 1000;
+                adminLastMsg = Date.now();
+                adminQueue = [];
+                adminHeartbeat = setInterval(() => {
+                    // Brak odpowiedzi serwera = martwe połączenie, którego przeglądarka jeszcze nie zauważyła
+                    if (Date.now() - adminLastMsg > 50000) { connectAdminSocket(); return; }
+                    if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+                }, 20000);
+                await Promise.all([loadUsers(), loadLogs()]);
+                if (adminWs !== socket) return;
+                const queued = adminQueue || [];
+                adminQueue = null;
+                queued.forEach(applyAdminEvent);
+            };
+
+            socket.onmessage = (event) => {
+                adminLastMsg = Date.now();
+                let msg;
+                try { msg = JSON.parse(event.data); } catch { return; }
+                if (msg.type === "pong") return;
+                if (adminQueue) adminQueue.push(msg);
+                else applyAdminEvent(msg);
+            };
+
+            socket.onclose = (event) => {
+                if (adminWs !== socket) return;
+                adminWs = null;
+                clearInterval(adminHeartbeat);
+                adminQueue = null;
+                if (event.code === 4401) {
+                    clearAdmin();
+                    render();
+                    return;
+                }
+                adminReconnectTimer = setTimeout(connectAdminSocket, adminReconnectDelay);
+                adminReconnectDelay = Math.min(adminReconnectDelay * 2, 15000);
+            };
+        }
+
+        function applyAdminEvent(msg) {
+            if (msg.type === "users_upsert") {
+                for (const user of msg.users) usersState.set(user.username, user);
+                renderUsers();
+            } else if (msg.type === "users_removed") {
+                for (const name of msg.usernames) usersState.delete(name);
+                renderUsers();
+            } else if (msg.type === "log") {
+                addLog(msg.log);
+            }
         }
 
         // ── Render / init ─────────────────────────────────────────────────────
@@ -1051,12 +1154,12 @@
                 loginView.classList.add("d-none");
                 adminView.classList.remove("d-none");
                 document.getElementById("admin-name").textContent = admin;
-                loadUsers();
-                loadLogs();
+                connectAdminSocket();
                 loadRoles();
                 loadQuests();
                 loadChallenges();
             } else {
+                stopAdminSocket();
                 loginView.classList.remove("d-none");
                 adminView.classList.add("d-none");
             }
@@ -1087,11 +1190,12 @@
         document.getElementById("logout-btn").addEventListener("click", () => { clearAdmin(); render(); });
         document.getElementById("refresh-btn").addEventListener("click", () => { loadUsers(); loadLogs(); });
 
-        // Odświeżanie tylko gdy karta jest widoczna – zbędne zapytania w tle obciążają serwer
-        setInterval(() => { if (getAdmin() && !document.hidden) { loadUsers(); loadLogs(); } }, 5000);
+        // Po powrocie do karty wznawiamy połączenie tylko gdy jest martwe – działające na bieżąco zdarzenia nie wymagają odświeżania
         document.addEventListener("visibilitychange", () => {
-            if (getAdmin() && !document.hidden) { loadUsers(); loadLogs(); }
+            if (document.hidden || !getAdmin()) return;
+            if (!adminWs || adminWs.readyState !== WebSocket.OPEN || Date.now() - adminLastMsg > 50000) connectAdminSocket();
         });
+        window.addEventListener("online", () => { if (getAdmin()) connectAdminSocket(); });
 
         render();
     </script>
