@@ -372,6 +372,23 @@
                             <p id="draw-err" class="msg-error mt-2" style="display:none;"></p>
                         </div>
 
+                        <!-- Nagrody -->
+                        <div class="tab-panel" id="tab-rewards">
+                            <div class="section-label">Nagrody</div>
+                            <table class="table table-borderless">
+                                <thead>
+                                    <tr>
+                                        <th>Nazwa</th>
+                                        <th>Opis</th>
+                                        <th>Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rewards-body">
+                                </tbody>
+                            </table>
+                            <button id="add-reward-btn" class="btn btn-ghost btn-sm mt-1">+ Dodaj nagrodę</button>
+                        </div>
+
                         <!-- Zasady -->
                         <div class="tab-panel" id="tab-rules">
                             <div class="section-label">Zasady gry</div>
@@ -427,6 +444,7 @@
                             <li class="tab-nav-item active"><button class="tab-btn" data-tab="tab-roles" title="Role"><i class="fa-solid fa-users-gear"></i><span>Role</span></button></li>
                             <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-quests" title="Zadania"><i class="fa-solid fa-clipboard-list"></i><span>Zadania</span></button></li>
                             <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-challenges" title="Wyzwania"><i class="fa-solid fa-trophy"></i><span>Wyzwania</span></button></li>
+                            <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-rewards" title="Nagrody"><i class="fa-solid fa-gift"></i><span>Nagrody</span></button></li>
                             <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-rules" title="Zasady"><i class="fa-solid fa-book"></i><span>Zasady</span></button></li>
                             <li class="tab-nav-item"><button class="tab-btn" data-tab="tab-tutorial" title="Tutorial"><i class="fa-solid fa-graduation-cap"></i><span>Tutorial</span></button></li>
                         </ul>
@@ -498,6 +516,9 @@
             } catch { tbody.innerHTML = "<tr><td colspan='7'>Błąd.</td></tr>"; }
         }
 
+        // Wiersze w trybie edycji trzymamy osobno, żeby zdarzenia z WebSocketu nie kasowały wpisywanych wartości
+        const editingUsers = new Map();
+
         function renderUsers() {
             const tbody = document.getElementById("user-list");
             try {
@@ -509,29 +530,153 @@
                     return;
                 }
                 for (const user of users) {
-                    const rewards = (user.rewards || []).map(r =>
-                        r.used
-                            ? `<s class="text-muted">${escHtml(r.reward)}</s> (użyta)`
-                            : escHtml(r.reward)
-                    ).join("<br>") || "–";
-                    const name = escQ(user.username);
-                    const tr = document.createElement("tr");
-                    tr.innerHTML = `
-                        <td>${escHtml(user.username)}</td>
-                        <td>${escHtml(user.role ?? "nieznana")}</td>
-                        <td>${user.online ? "🟢" : "⚫"}<span class="ping-lamp${user.pinged ? " lit" : ""}" ${user.pinged ? `title="Gracz pingnął – kliknij, aby zgasić" onclick="clearPing('${name}')"` : ""}></span></td>
-                        <td>${user.group_num ?? "–"}</td>
-                        <td>${escHtml(user.challenge ?? "–")}</td>
-                        <td>${rewards}</td>
-                        <td>
-                            <button class="btn-inline" onclick="deleteUser('${name}')">Usuń</button>
-                            ${user.challenge ? `<button class="btn-inline" onclick="completeUserChallenge('${name}')">Wykonane</button>` : ""}
-                            ${user.challenge ? `<button class="btn-inline" onclick="deleteUserChallenge('${name}')">Usuń wyz.</button>` : ""}
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
+                    const editRow = editingUsers.get(user.username);
+                    if (editRow) {
+                        editRow.children[2].innerHTML = statusHtml(user);
+                        editRow.children[3].textContent = user.group_num ?? "–";
+                        tbody.appendChild(editRow);
+                    } else {
+                        tbody.appendChild(buildUserRow(user));
+                    }
                 }
+                for (const name of [...editingUsers.keys()]) if (!usersState.has(name)) editingUsers.delete(name);
             } catch { tbody.innerHTML = "<tr><td colspan='7'>Błąd.</td></tr>"; }
+        }
+
+        function statusHtml(user) {
+            const name = escQ(user.username);
+            return `${user.online ? "🟢" : "⚫"}<span class="ping-lamp${user.pinged ? " lit" : ""}" ${user.pinged ? `title="Gracz pingnął – kliknij, aby zgasić" onclick="clearPing('${name}')"` : ""}></span>`;
+        }
+
+        function rewardsHtml(rewards) {
+            return (rewards || []).map(r =>
+                r.used
+                    ? `<s class="text-muted">${escHtml(r.reward)}</s> (użyta)`
+                    : escHtml(r.reward)
+            ).join("<br>") || "–";
+        }
+
+        function buildUserRow(user) {
+            const name = escQ(user.username);
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${escHtml(user.username)}</td>
+                <td>${escHtml(user.role ?? "nieznana")}</td>
+                <td>${statusHtml(user)}</td>
+                <td>${user.group_num ?? "–"}</td>
+                <td>${user.challenge ? `<button class="btn-inline" onclick="completeUserChallenge('${name}')">${escHtml(user.challenge)}</button>` : "–"}</td>
+                <td>${rewardsHtml(user.rewards)}</td>
+                <td>
+                    <button class="btn-inline" onclick="startUserEdit('${name}')">Edytuj</button>
+                    <button class="btn-inline" onclick="deleteUser('${name}')">Usuń</button>
+                </td>
+            `;
+            return tr;
+        }
+
+        async function startUserEdit(username) {
+            const user = usersState.get(username);
+            if (!user) return;
+            let challenges;
+            try {
+                const res = await fetch(`${API}/admin/challenges`);
+                challenges = (await res.json()).challenges;
+                await fetchRewards();
+            } catch { alert("Błąd ładowania wyzwań."); return; }
+            editingUsers.set(username, buildUserEditRow(user, challenges));
+            renderUsers();
+        }
+
+        function rewardOptionsHtml(selectedId) {
+            return `<option value="" ${selectedId == null ? "selected" : ""}>-</option>` +
+                rewardsCache.map(r => `<option value="${r.id}" ${r.id === selectedId ? "selected" : ""}>${escHtml(r.name)}</option>`).join("");
+        }
+
+        function rewardChipHtml(dataAttr, name) {
+            return `<div class="d-flex gap-1 mb-1 align-items-center" ${dataAttr}>
+                        <span>${escHtml(name)}</span>
+                        <button type="button" class="btn-inline rw-del" title="Usuń nagrodę">×</button>
+                    </div>`;
+        }
+
+        function buildUserEditRow(user, challenges) {
+            const name = escQ(user.username);
+            const roleNames = manualRoles.map(r => r.name);
+            for (const extra of ["Cywil", user.role]) if (extra && !roleNames.includes(extra)) roleNames.push(extra);
+            const roleOptions = `<option value="" ${!user.role ? "selected" : ""}>-</option>` +
+                roleNames.map(n => `<option value="${escHtml(n)}" ${n === user.role ? "selected" : ""}>${escHtml(n)}</option>`).join("");
+            const challengeOptions = `<option value="" ${user.challenge_id == null ? "selected" : ""}>-</option>` +
+                challenges.map(c => `<option value="${c.id}" ${c.id === user.challenge_id ? "selected" : ""}>${escHtml(c.title)}</option>`).join("");
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${escHtml(user.username)}</td>
+                <td><select class="form-control form-control-sm u-role" style="width:130px">${roleOptions}</select></td>
+                <td>${statusHtml(user)}</td>
+                <td>${user.group_num ?? "–"}</td>
+                <td><select class="form-control form-control-sm u-challenge" style="width:150px">${challengeOptions}</select></td>
+                <td>
+                    <div class="rw-list">${(user.rewards || []).map(r => rewardChipHtml(`data-reward-id="${r.id}"`, r.reward)).join("")}</div>
+                    <div class="d-flex gap-1 mt-1">
+                        <select class="form-control form-control-sm rw-select" style="width:130px">${rewardOptionsHtml(null)}</select>
+                        <button type="button" class="btn-inline rw-add">+ Nagroda</button>
+                    </div>
+                </td>
+                <td>
+                    <button class="btn-inline" onclick="saveUserEdit('${name}')">Zapisz</button>
+                    <button class="btn-inline" onclick="cancelUserEdit('${name}')">Anuluj</button>
+                </td>
+            `;
+            tr.addEventListener("click", (e) => {
+                if (e.target.classList.contains("rw-del")) e.target.parentElement.remove();
+                else if (e.target.classList.contains("rw-add")) {
+                    const select = tr.querySelector(".rw-select");
+                    const rid = Number(select.value);
+                    if (!rid) return;
+                    const reward = rewardsCache.find(r => r.id === rid);
+                    tr.querySelector(".rw-list").insertAdjacentHTML("beforeend", rewardChipHtml(`data-add-id="${rid}"`, reward.name));
+                    select.value = "";
+                }
+            });
+            return tr;
+        }
+
+        function cancelUserEdit(username) {
+            editingUsers.delete(username);
+            renderUsers();
+        }
+
+        async function saveUserEdit(username) {
+            const tr = editingUsers.get(username);
+            const user = usersState.get(username);
+            if (!tr || !user) { cancelUserEdit(username); return; }
+
+            const role = tr.querySelector(".u-role").value || null;
+            const challengeVal = tr.querySelector(".u-challenge").value;
+            const challengeId = challengeVal ? Number(challengeVal) : null;
+            const keepIds = [...tr.querySelectorAll(".rw-list [data-reward-id]")].map(div => Number(div.dataset.rewardId));
+            const addIds = [...tr.querySelectorAll(".rw-list [data-add-id]")].map(div => Number(div.dataset.addId));
+
+            const calls = [];
+            if ((user.role ?? null) !== role) calls.push(["role", { role }]);
+            if ((user.challenge_id ?? null) !== challengeId) calls.push(["challenge", { challenge_id: challengeId }]);
+            if (addIds.length || keepIds.length !== (user.rewards || []).length) {
+                calls.push(["rewards", { keep_ids: keepIds, add_reward_ids: addIds }]);
+            }
+
+            for (const [path, body] of calls) {
+                try {
+                    const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/${path}`, {
+                        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        alert(typeof data.detail === "string" ? data.detail : "Błąd zapisu.");
+                        return;
+                    }
+                } catch { alert("Brak połączenia."); return; }
+            }
+            cancelUserEdit(username);
         }
 
         async function clearPing(username) {
@@ -578,7 +723,8 @@
         }
 
         async function completeUserChallenge(username) {
-            if (!confirm(`Zatwierdzić wykonanie wyzwania i przyznać nagrodę graczowi "${username}"?`)) return;
+            const title = usersState.get(username)?.challenge ?? "";
+            if (!confirm(`Czy wykonać wyzwanie „${title}” i przyznać nagrodę graczowi "${username}"?`)) return;
             const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/complete-challenge`, { method: "POST" });
             if (!res.ok) alert("Błąd zatwierdzania wyzwania.");
         }
@@ -587,12 +733,6 @@
             if (!confirm(`Usunąć "${username}"?`)) return;
             const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}`, { method: "DELETE" });
             if (!res.ok) alert("Błąd usuwania.");
-        }
-
-        async function deleteUserChallenge(username) {
-            if (!confirm(`Usunąć wyzwanie graczowi "${username}"?`)) return;
-            const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/challenge`, { method: "DELETE" });
-            if (!res.ok) alert("Błąd usuwania wyzwania.");
         }
 
         // ── Roles ─────────────────────────────────────────────────────────────
@@ -934,7 +1074,109 @@
             msg.style.display = "block";
         });
 
+        // ── Rewards catalog ───────────────────────────────────────────────────
+
+        let rewardsCache = [];
+
+        async function fetchRewards() {
+            const res = await fetch(`${API}/admin/rewards`);
+            rewardsCache = (await res.json()).rewards;
+            return rewardsCache;
+        }
+
+        async function loadRewards() {
+            const tbody = document.getElementById("rewards-body");
+            await fetchRewards();
+            tbody.innerHTML = "";
+            for (const r of rewardsCache) tbody.appendChild(makeRewardRow(r));
+        }
+
+        function makeRewardRow(r) {
+            const tr = document.createElement("tr");
+            renderRewardView(tr, r);
+            return tr;
+        }
+
+        function renderRewardView(tr, r) {
+            tr.innerHTML = `
+                <td>${escHtml(r.name)}</td>
+                <td>${escHtml(r.description)}</td>
+                <td>
+                    <button class="btn-inline" onclick="editReward(this,${r.id})">Edytuj</button>
+                    <button class="btn-inline" onclick="deleteReward(${r.id},this)">Usuń</button>
+                </td>`;
+        }
+
+        function renderRewardEdit(tr, r) {
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm r-name" value="${escHtml(r.name)}" style="width:150px"></td>
+                <td><input class="form-control form-control-sm r-desc" value="${escHtml(r.description)}" style="width:250px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveReward(this,${r.id})">Zatwierdź</button>
+                    <button class="btn-inline" onclick="cancelReward(this,${r.id})">Anuluj</button>
+                </td>`;
+        }
+
+        function editReward(btn, id) { renderRewardEdit(btn.closest("tr"), rewardsCache.find(r => r.id === id)); }
+        function cancelReward(btn, id) { renderRewardView(btn.closest("tr"), rewardsCache.find(r => r.id === id)); }
+
+        async function saveReward(btn, id) {
+            const tr = btn.closest("tr");
+            const name = tr.querySelector(".r-name").value.trim();
+            const description = tr.querySelector(".r-desc").value.trim();
+            if (!name) { alert("Podaj nazwę."); return; }
+            const res = await fetch(`${API}/admin/rewards/${id}`, {
+                method: "PUT", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, description }),
+            });
+            if (!res.ok) { alert("Błąd zapisu."); return; }
+            const updated = await res.json();
+            rewardsCache = rewardsCache.map(r => r.id === id ? updated : r);
+            renderRewardView(tr, updated);
+            loadChallenges();
+        }
+
+        async function deleteReward(id, btn) {
+            if (!confirm("Usunąć nagrodę? Wyzwania z tą nagrodą zostaną bez nagrody.")) return;
+            const res = await fetch(`${API}/admin/rewards/${id}`, { method: "DELETE" });
+            if (!res.ok) { alert("Błąd."); return; }
+            rewardsCache = rewardsCache.filter(r => r.id !== id);
+            btn.closest("tr").remove();
+            loadChallenges();
+        }
+
+        document.getElementById("add-reward-btn").addEventListener("click", () => {
+            const tbody = document.getElementById("rewards-body");
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><input class="form-control form-control-sm r-name" placeholder="Nazwa" style="width:150px"></td>
+                <td><input class="form-control form-control-sm r-desc" placeholder="Opis" style="width:250px"></td>
+                <td>
+                    <button class="btn-inline" onclick="saveNewReward(this)">Zatwierdź</button>
+                    <button class="btn-inline" onclick="this.closest('tr').remove()">Anuluj</button>
+                </td>`;
+            tbody.appendChild(tr);
+            tr.querySelector(".r-name").focus();
+        });
+
+        async function saveNewReward(btn) {
+            const tr = btn.closest("tr");
+            const name = tr.querySelector(".r-name").value.trim();
+            const description = tr.querySelector(".r-desc").value.trim();
+            if (!name) { alert("Podaj nazwę."); return; }
+            const res = await fetch(`${API}/admin/rewards`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, description }),
+            });
+            if (!res.ok) { alert("Błąd dodawania."); return; }
+            const created = await res.json();
+            rewardsCache.push(created);
+            renderRewardView(tr, created);
+        }
+
         // ── Challenges ────────────────────────────────────────────────────────
+
+        const challengesState = new Map();
 
         async function loadChallenges() {
             const tbody = document.getElementById("challenges-body");
@@ -952,41 +1194,45 @@
         }
 
         function renderChallengeView(tr, c) {
+            challengesState.set(c.id, c);
             tr.innerHTML = `
                 <td><input class="form-check-input ch-check" type="checkbox" value="${c.id}"></td>
                 <td>${escHtml(c.title)}</td>
                 <td>${escHtml(c.description)}</td>
                 <td>${escHtml(c.reward)}</td>
                 <td>
-                    <button class="btn-inline" onclick="editChallenge(this,${c.id},'${escQ(c.title)}','${escQ(c.description)}','${escQ(c.reward)}')">Edytuj</button>
+                    <button class="btn-inline" onclick="editChallenge(this,${c.id})">Edytuj</button>
                     <button class="btn-inline" onclick="deleteChallenge(${c.id},this)">Usuń</button>
                 </td>`;
         }
 
-        function renderChallengeEdit(tr, id, title, description, reward) {
+        function renderChallengeEdit(tr, c) {
             tr.innerHTML = `
-                <td><input class="form-check-input ch-check" type="checkbox" value="${id}" disabled></td>
-                <td><input class="form-control form-control-sm c-title" value="${escHtml(title)}" style="width:100px"></td>
-                <td><input class="form-control form-control-sm c-desc" value="${escHtml(description)}" style="width:150px"></td>
-                <td><input class="form-control form-control-sm c-reward" value="${escHtml(reward)}" style="width:100px"></td>
+                <td><input class="form-check-input ch-check" type="checkbox" value="${c.id}" disabled></td>
+                <td><input class="form-control form-control-sm c-title" value="${escHtml(c.title)}" style="width:100px"></td>
+                <td><input class="form-control form-control-sm c-desc" value="${escHtml(c.description)}" style="width:150px"></td>
+                <td><select class="form-control form-control-sm c-reward" style="width:130px">${rewardOptionsHtml(c.reward_id)}</select></td>
                 <td>
-                    <button class="btn-inline" onclick="saveChallenge(this,${id})">Zatwierdź</button>
-                    <button class="btn-inline" onclick="cancelChallenge(this,${id},'${escQ(title)}','${escQ(description)}','${escQ(reward)}')">Anuluj</button>
+                    <button class="btn-inline" onclick="saveChallenge(this,${c.id})">Zatwierdź</button>
+                    <button class="btn-inline" onclick="cancelChallenge(this,${c.id})">Anuluj</button>
                 </td>`;
         }
 
-        function editChallenge(btn, id, title, desc, reward) { renderChallengeEdit(btn.closest("tr"), id, title, desc, reward); }
-        function cancelChallenge(btn, id, t, d, r) { renderChallengeView(btn.closest("tr"), { id, title: t, description: d, reward: r }); }
+        async function editChallenge(btn, id) {
+            await fetchRewards();
+            renderChallengeEdit(btn.closest("tr"), challengesState.get(id));
+        }
+        function cancelChallenge(btn, id) { renderChallengeView(btn.closest("tr"), challengesState.get(id)); }
 
         async function saveChallenge(btn, id) {
             const tr = btn.closest("tr");
             const title = tr.querySelector(".c-title").value.trim();
             const desc = tr.querySelector(".c-desc").value.trim();
-            const reward = tr.querySelector(".c-reward").value.trim();
+            const rewardVal = tr.querySelector(".c-reward").value;
             if (!title) { alert("Podaj tytuł."); return; }
             const res = await fetch(`${API}/admin/challenges/${id}`, {
                 method: "PUT", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title, description: desc, reward }),
+                body: JSON.stringify({ title, description: desc, reward_id: rewardVal ? Number(rewardVal) : null }),
             });
             if (!res.ok) { alert("Błąd zapisu."); return; }
             renderChallengeView(tr, await res.json());
@@ -999,14 +1245,15 @@
             else alert("Błąd.");
         }
 
-        document.getElementById("add-challenge-btn").addEventListener("click", () => {
+        document.getElementById("add-challenge-btn").addEventListener("click", async () => {
+            await fetchRewards();
             const tbody = document.getElementById("challenges-body");
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td></td>
                 <td><input class="form-control form-control-sm c-title" placeholder="Tytuł" style="width:100px"></td>
                 <td><input class="form-control form-control-sm c-desc" placeholder="Opis" style="width:150px"></td>
-                <td><input class="form-control form-control-sm c-reward" placeholder="Nagroda" style="width:100px"></td>
+                <td><select class="form-control form-control-sm c-reward" style="width:130px">${rewardOptionsHtml(null)}</select></td>
                 <td>
                     <button class="btn-inline" onclick="saveNewChallenge(this)">Zatwierdź</button>
                     <button class="btn-inline" onclick="this.closest('tr').remove()">Anuluj</button>
@@ -1019,11 +1266,11 @@
             const tr = btn.closest("tr");
             const title = tr.querySelector(".c-title").value.trim();
             const desc = tr.querySelector(".c-desc").value.trim();
-            const reward = tr.querySelector(".c-reward").value.trim();
+            const rewardVal = tr.querySelector(".c-reward").value;
             if (!title) { alert("Podaj tytuł."); return; }
             const res = await fetch(`${API}/admin/challenges`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title, description: desc, reward }),
+                body: JSON.stringify({ title, description: desc, reward_id: rewardVal ? Number(rewardVal) : null }),
             });
             if (!res.ok) { alert("Błąd dodawania."); return; }
             renderChallengeView(tr, await res.json());
@@ -1158,6 +1405,7 @@
                 loadRoles();
                 loadQuests();
                 loadChallenges();
+                loadRewards();
             } else {
                 stopAdminSocket();
                 loginView.classList.remove("d-none");

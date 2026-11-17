@@ -368,11 +368,11 @@
                 const title = document.createElement("div");
                 title.className = "fw-bold";
                 title.textContent = reward.reward || "";
-                const source = document.createElement("div");
-                source.className = "text-muted";
-                source.style.fontSize = "0.85rem";
-                source.textContent = reward.challenge_title ? `Za: ${reward.challenge_title}` : "";
-                text.append(title, source);
+                const description = document.createElement("div");
+                description.style.fontSize = "0.9rem";
+                description.textContent = reward.description || "";
+                description.hidden = !reward.description;
+                text.append(title, description);
 
                 const button = document.createElement("button");
                 button.type = "button";

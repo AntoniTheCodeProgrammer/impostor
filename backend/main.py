@@ -109,6 +109,10 @@ async def init_db():
             "(id INTEGER PRIMARY KEY, title TEXT, description TEXT, reward TEXT)"
         )
         await client.execute(
+            "CREATE TABLE IF NOT EXISTS rewards "
+            "(id INTEGER PRIMARY KEY, name TEXT, description TEXT)"
+        )
+        await client.execute(
             "CREATE TABLE IF NOT EXISTS user_rewards "
             "(id INTEGER PRIMARY KEY, username TEXT, challenge_title TEXT, reward TEXT, "
             " used INTEGER DEFAULT 0)"
@@ -121,6 +125,31 @@ async def init_db():
             "CREATE TABLE IF NOT EXISTS activity_log "
             "(id INTEGER PRIMARY KEY, created_at TEXT, username TEXT, action TEXT, detail TEXT)"
         )
+        await _add_column(client, "user_rewards", "description TEXT DEFAULT ''")
+        if await _add_column(client, "challenges", "reward_id INTEGER DEFAULT NULL"):
+            # Dotychczasowe tekstowe nagrody wyzwań trafiają do katalogu, żeby ich nie stracić
+            legacy = await client.execute(
+                "SELECT id, reward FROM challenges WHERE reward IS NOT NULL AND reward != ''"
+            )
+            for challenge_id, name in legacy.rows:
+                created = await client.execute(
+                    "INSERT INTO rewards (name, description) VALUES (?, '')", [name]
+                )
+                await client.execute(
+                    "UPDATE challenges SET reward_id = ? WHERE id = ?",
+                    [created.last_insert_rowid, challenge_id],
+                )
+
+
+async def _add_column(client, table: str, definition: str) -> bool:
+    """Dodaje kolumnę, jeśli jej jeszcze nie ma. Zwraca True, gdy została dodana."""
+    try:
+        await client.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+        return True
+    except Exception as e:
+        if "duplicate column" in str(e).lower():
+            return False
+        raise
 
 
 @asynccontextmanager
@@ -252,6 +281,20 @@ class RoleBody(BaseModel):
 class ManualAssignBody(BaseModel):
     assignments: dict[str, str]
 
+class UserRoleBody(BaseModel):
+    role: str | None = Field(default=None, max_length=60)
+
+class UserChallengeBody(BaseModel):
+    challenge_id: int | None = None
+
+class RewardBody(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=1000)
+
+class UserRewardsBody(BaseModel):
+    keep_ids: list[int] = Field(default_factory=list)
+    add_reward_ids: list[int] = Field(default_factory=list)
+
 class QuestBody(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
@@ -260,7 +303,7 @@ class QuestBody(BaseModel):
 class ChallengeBody(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
-    reward: str = Field(default="", max_length=200)
+    reward_id: int | None = None
 
 class ActivateTaskRequest(BaseModel):
     quest_id: int
@@ -320,7 +363,7 @@ async def admin_user_rows(client, usernames: list[str] | None = None) -> list[di
          "FROM users u "
          "LEFT JOIN user_tasks ut ON u.username = ut.username "
          "LEFT JOIN challenges c ON u.challenge_id = c.id" + u_where, u_args),
-        ("SELECT username, reward, used FROM user_rewards" + r_where + " ORDER BY id", r_args),
+        ("SELECT id, username, reward, description, used FROM user_rewards" + r_where + " ORDER BY id", r_args),
         ("SELECT username FROM user_pings" + r_where, r_args),
     ])
     pinged = {row[0] for row in pings_result.rows}
@@ -328,7 +371,8 @@ async def admin_user_rows(client, usernames: list[str] | None = None) -> list[di
     for row in rewards_result.rows:
         rw = row_to_dict(rewards_result.columns, row)
         rewards_by_user.setdefault(rw["username"], []).append(
-            {"reward": rw["reward"], "used": bool(rw["used"])}
+            {"id": rw["id"], "reward": rw["reward"], "description": rw["description"] or "",
+             "used": bool(rw["used"])}
         )
     users = []
     for row in result.rows:
@@ -338,6 +382,7 @@ async def admin_user_rows(client, usernames: list[str] | None = None) -> list[di
             "role": r["role"],
             "online": r["username"] in active_connections,
             "group_num": r["group_num"],
+            "challenge_id": r["challenge_id"],
             "challenge": r["challenge_title"],
             "rewards": rewards_by_user.get(r["username"], []),
             "pinged": r["username"] in pinged,
@@ -375,7 +420,7 @@ async def build_state(client, username: str) -> dict | None:
         # Nagroda jest ujawniana dopiero po zatwierdzeniu wykonania przez admina
         ("SELECT c.id, c.title, c.description FROM users u "
          "JOIN challenges c ON c.id = u.challenge_id WHERE u.username = ?", [username]),
-        ("SELECT id, challenge_title, reward FROM user_rewards "
+        ("SELECT id, challenge_title, reward, description FROM user_rewards "
          "WHERE username = ? AND used = 0 ORDER BY id", [username]),
     ])
     if not user_rs.rows:
@@ -389,7 +434,7 @@ async def build_state(client, username: str) -> dict | None:
 
 
 def public_challenge(challenge: dict) -> dict:
-    return {k: v for k, v in challenge.items() if k != "reward"}
+    return {k: v for k, v in challenge.items() if k not in ("reward", "reward_id")}
 
 
 def now_iso() -> str:
@@ -661,25 +706,116 @@ async def delete_user_challenge(username: str):
 @app.post("/admin/users/{username}/complete-challenge")
 async def complete_user_challenge(username: str):
     async with get_client() as client:
-        # Jedna transakcja: dwa równoległe kliknięcia nie przyznają nagrody dwa razy
-        inserted, _ = await client.batch([
-            ("INSERT INTO user_rewards (username, challenge_title, reward) "
-             "SELECT u.username, c.title, c.reward FROM users u "
-             "JOIN challenges c ON c.id = u.challenge_id WHERE u.username = ?", [username]),
-            ("UPDATE users SET challenge_id = NULL WHERE username = ?", [username]),
+        # Jedna transakcja: dwa równoległe kliknięcia nie przyznają nagrody dwa razy.
+        # Nagroda jest kopiowana przed wyczyszczeniem challenge_id (kolejność w batchu ma znaczenie).
+        inserted, cleared = await client.batch([
+            ("INSERT INTO user_rewards (username, challenge_title, reward, description) "
+             "SELECT u.username, c.title, r.name, r.description FROM users u "
+             "JOIN challenges c ON c.id = u.challenge_id "
+             "JOIN rewards r ON r.id = c.reward_id WHERE u.username = ?", [username]),
+            ("UPDATE users SET challenge_id = NULL WHERE username = ? AND challenge_id IS NOT NULL",
+             [username]),
         ])
-        if inserted.rows_affected == 0:
+        if cleared.rows_affected == 0:
             raise HTTPException(status_code=404, detail="Gracz nie ma aktywnego wyzwania")
-        created = await client.execute(
-            "SELECT id, challenge_title, reward FROM user_rewards WHERE id = ?",
-            [inserted.last_insert_rowid],
-        )
+        reward = None
+        if inserted.rows_affected:
+            created = await client.execute(
+                "SELECT id, challenge_title, reward, description FROM user_rewards WHERE id = ?",
+                [inserted.last_insert_rowid],
+            )
+            reward = row_to_dict(created.columns, created.rows[0])
 
-    reward = row_to_dict(created.columns, created.rows[0])
     await send_to(username, {"type": "challenge_removed"})
-    await send_to(username, {"type": "reward", "reward": reward})
+    if reward:
+        await send_to(username, {"type": "reward", "reward": reward})
     await publish_users([username])
     return {"status": "completed", "reward": reward}
+
+
+@app.put("/admin/users/{username}/role")
+async def set_user_role(username: str, body: UserRoleBody):
+    async with get_client() as client:
+        if body.role is not None and body.role != "Cywil":
+            found = await client.execute("SELECT count FROM roles WHERE name = ?", [body.role])
+            if not found.rows:
+                raise HTTPException(status_code=404, detail=f"Rola {body.role} nie istnieje")
+            limit = found.rows[0][0]
+            used = await client.execute(
+                "SELECT COUNT(*) FROM users WHERE role = ? AND username != ?", [body.role, username]
+            )
+            if used.rows[0][0] >= limit:
+                raise HTTPException(
+                    status_code=400, detail=f"Brak miejsc w roli {body.role} ({limit})"
+                )
+        result = await client.execute(
+            "UPDATE users SET role = ? WHERE username = ?", [body.role, username]
+        )
+    if result.rows_affected == 0:
+        raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
+
+    if body.role is not None:
+        await send_to(username, {"type": "role", "role": body.role})
+    await publish_users([username])
+    return {"status": "updated"}
+
+
+@app.put("/admin/users/{username}/challenge")
+async def set_user_challenge(username: str, body: UserChallengeBody):
+    challenge = None
+    async with get_client() as client:
+        if body.challenge_id is not None:
+            found = await client.execute("SELECT * FROM challenges WHERE id = ?", [body.challenge_id])
+            if not found.rows:
+                raise HTTPException(status_code=404, detail="Wyzwanie nie istnieje")
+            challenge = row_to_dict(found.columns, found.rows[0])
+        result = await client.execute(
+            "UPDATE users SET challenge_id = ? WHERE username = ?", [body.challenge_id, username]
+        )
+    if result.rows_affected == 0:
+        raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
+
+    if challenge:
+        await send_to(username, {"type": "challenge", "challenge": public_challenge(challenge)})
+    else:
+        await send_to(username, {"type": "challenge_removed"})
+    await publish_users([username])
+    return {"status": "updated"}
+
+
+@app.put("/admin/users/{username}/rewards")
+async def set_user_rewards(username: str, body: UserRewardsBody):
+    async with get_client() as client:
+        existing = await client.execute("SELECT id FROM user_rewards WHERE username = ?", [username])
+        owned = {row[0] for row in existing.rows}
+        if not set(body.keep_ids) <= owned:
+            raise HTTPException(status_code=400, detail="Nagroda nie należy do gracza")
+
+        add_ids = list(dict.fromkeys(body.add_reward_ids))
+        catalog: dict[int, dict] = {}
+        if add_ids:
+            found = await client.execute(
+                f"SELECT id, name, description FROM rewards WHERE id IN ({','.join('?' * len(add_ids))})",
+                add_ids,
+            )
+            catalog = {row[0]: row_to_dict(found.columns, row) for row in found.rows}
+            if len(catalog) != len(add_ids):
+                raise HTTPException(status_code=404, detail="Nagroda nie istnieje")
+
+        statements = [("DELETE FROM user_rewards WHERE id = ?", [rid])
+                      for rid in owned - set(body.keep_ids)]
+        for rid in add_ids:
+            # Nagroda jest kopiowana, więc późniejsza edycja katalogu nie zmienia przyznanych nagród
+            statements.append((
+                "INSERT INTO user_rewards (username, challenge_title, reward, description) "
+                "VALUES (?, 'Ręcznie', ?, ?)",
+                [username, catalog[rid]["name"], catalog[rid]["description"]],
+            ))
+        if statements:
+            await client.batch(statements)
+
+    await publish_users([username])
+    return {"status": "updated"}
 
 
 # ── Admin – roles ─────────────────────────────────────────────────────────────
@@ -847,38 +983,95 @@ async def delete_quest(quest_id: int):
     return {"status": "deleted"}
 
 
+# ── Admin – rewards catalog ───────────────────────────────────────────────────
+
+async def _require_reward_name(client, reward_id: int | None) -> str | None:
+    """Zwraca nazwę nagrody z katalogu; None oznacza brak nagrody."""
+    if reward_id is None:
+        return None
+    found = await client.execute("SELECT name FROM rewards WHERE id = ?", [reward_id])
+    if not found.rows:
+        raise HTTPException(status_code=404, detail="Nagroda nie istnieje")
+    return found.rows[0][0]
+
+
+@app.get("/admin/rewards")
+async def list_rewards():
+    async with get_client() as client:
+        result = await client.execute("SELECT id, name, description FROM rewards ORDER BY id")
+    return {"rewards": [row_to_dict(result.columns, r) for r in result.rows]}
+
+
+@app.post("/admin/rewards")
+async def create_reward(data: RewardBody):
+    async with get_client() as client:
+        result = await client.execute(
+            "INSERT INTO rewards (name, description) VALUES (?, ?)",
+            [data.name, data.description],
+        )
+    return {"id": result.last_insert_rowid, **data.model_dump()}
+
+
+@app.put("/admin/rewards/{reward_id}")
+async def update_reward(reward_id: int, data: RewardBody):
+    async with get_client() as client:
+        result = await client.execute(
+            "UPDATE rewards SET name=?, description=? WHERE id=?",
+            [data.name, data.description, reward_id],
+        )
+    if result.rows_affected == 0:
+        raise HTTPException(status_code=404, detail="Nagroda nie istnieje")
+    return {"id": reward_id, **data.model_dump()}
+
+
+@app.delete("/admin/rewards/{reward_id}")
+async def delete_reward(reward_id: int):
+    async with get_client() as client:
+        results = await client.batch([
+            ("DELETE FROM rewards WHERE id=?", [reward_id]),
+            ("UPDATE challenges SET reward_id=NULL WHERE reward_id=?", [reward_id]),
+        ])
+    if results[0].rows_affected == 0:
+        raise HTTPException(status_code=404, detail="Nagroda nie istnieje")
+    return {"status": "deleted"}
+
+
 # ── Admin – challenges CRUD ───────────────────────────────────────────────────
 
 @app.get("/admin/challenges")
 async def list_challenges():
     async with get_client() as client:
-        result = await client.execute("SELECT * FROM challenges")
+        result = await client.execute(
+            "SELECT c.id, c.title, c.description, c.reward_id, r.name AS reward "
+            "FROM challenges c LEFT JOIN rewards r ON r.id = c.reward_id ORDER BY c.id"
+        )
     return {"challenges": [row_to_dict(result.columns, r) for r in result.rows]}
 
 
 @app.post("/admin/challenges")
 async def create_challenge(data: ChallengeBody):
     async with get_client() as client:
+        reward = await _require_reward_name(client, data.reward_id)
         result = await client.execute(
-            "INSERT INTO challenges (title, description, reward) VALUES (?, ?, ?)",
-            [data.title, data.description, data.reward],
+            "INSERT INTO challenges (title, description, reward_id) VALUES (?, ?, ?)",
+            [data.title, data.description, data.reward_id],
         )
-        return {"id": result.last_insert_rowid, **data.model_dump()}
+    return {"id": result.last_insert_rowid, **data.model_dump(), "reward": reward}
 
 
 @app.put("/admin/challenges/{challenge_id}")
 async def update_challenge(challenge_id: int, data: ChallengeBody):
     async with get_client() as client:
+        reward = await _require_reward_name(client, data.reward_id)
         result = await client.execute(
-            "UPDATE challenges SET title=?, description=?, reward=? WHERE id=?",
-            [data.title, data.description, data.reward, challenge_id],
+            "UPDATE challenges SET title=?, description=?, reward_id=? WHERE id=?",
+            [data.title, data.description, data.reward_id, challenge_id],
         )
-    if result.rows_affected == 0:
-        raise HTTPException(status_code=404, detail="Wyzwanie nie istnieje")
-    async with get_client() as client:
+        if result.rows_affected == 0:
+            raise HTTPException(status_code=404, detail="Wyzwanie nie istnieje")
         holders = await client.execute("SELECT username FROM users WHERE challenge_id=?", [challenge_id])
     await publish_users([row[0] for row in holders.rows])
-    return {"id": challenge_id, **data.model_dump()}
+    return {"id": challenge_id, **data.model_dump(), "reward": reward}
 
 
 @app.delete("/admin/challenges/{challenge_id}")
