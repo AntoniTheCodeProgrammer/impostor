@@ -1043,7 +1043,8 @@ async def list_challenges():
     async with get_client() as client:
         result = await client.execute(
             "SELECT c.id, c.title, c.description, c.reward_id, r.name AS reward "
-            "FROM challenges c LEFT JOIN rewards r ON r.id = c.reward_id ORDER BY c.id"
+            "FROM challenges c LEFT JOIN rewards r ON r.id = c.reward_id "
+            "ORDER BY c.reward_id IS NULL, c.reward_id, c.id"
         )
     return {"challenges": [row_to_dict(result.columns, r) for r in result.rows]}
 

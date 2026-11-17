@@ -522,7 +522,9 @@
         function renderUsers() {
             const tbody = document.getElementById("user-list");
             try {
-                const users = [...usersState.values()];
+                // Gracze z aktywnym pingiem na górze; w obrębie grupy po nazwie
+                const users = [...usersState.values()].sort((a, b) =>
+                    (Number(b.pinged) - Number(a.pinged)) || a.username.localeCompare(b.username, "pl"));
                 populateManualUsers(users);
                 tbody.innerHTML = "";
                 if (!users.length) {
