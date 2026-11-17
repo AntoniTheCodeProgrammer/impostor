@@ -142,14 +142,16 @@ async def init_db():
 
 
 async def _add_column(client, table: str, definition: str) -> bool:
-    """Dodaje kolumnę, jeśli jej jeszcze nie ma. Zwraca True, gdy została dodana."""
-    try:
-        await client.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
-        return True
-    except Exception as e:
-        if "duplicate column" in str(e).lower():
-            return False
-        raise
+    """Dodaje kolumnę, jeśli jej jeszcze nie ma. Zwraca True, gdy została dodana.
+
+    Istnienie sprawdzamy przez PRAGMA, a nie przez treść błędu – ta różni się między lokalnym libsql a Turso (HTTP).
+    """
+    column = definition.split()[0]
+    existing = await client.execute(f"PRAGMA table_info({table})")
+    if any(row[1] == column for row in existing.rows):
+        return False
+    await client.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+    return True
 
 
 @asynccontextmanager
