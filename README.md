@@ -138,6 +138,8 @@ komunikują się z serwerem przez token sesji – sama znajomość nazwy gracza 
    - `frontend/index.html`
    - `frontend/admin.html`
    - `frontend/config.js`
+   - `frontend/theme.css`
+   - `frontend/icon.png`
 
 3. Gracze wchodzą na `https://twoja-strona.pl/index.html` (lub główny URL),
    Admin wchodzi na `https://twoja-strona.pl/admin.html`.
@@ -155,6 +157,8 @@ impostor/
 ├── frontend/
 │   ├── index.html           # Panel gracza
 │   ├── admin.html           # Panel Mistrza Gry
+│   ├── theme.css            # Motyw daisyUI (kolory z icon.png)
+│   ├── icon.png             # Logo / favicon
 │   └── config.js            # ← JEDYNE miejsce gdzie podajesz URL backendu (wybierany automatycznie)
 ├── render.yaml              # Konfiguracja Render.com
 ├── .gitignore

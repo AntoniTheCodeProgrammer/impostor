@@ -1,0 +1,119 @@
+/* Motyw "impostor" – kolory z icon.png: niebieskie tło, czerwony bohater, czarny kontur */
+[data-theme="impostor"] {
+    color-scheme: dark;
+    --color-base-100: oklch(24% 0.04 265);
+    --color-base-200: oklch(20% 0.04 265);
+    --color-base-300: oklch(32% 0.05 265);
+    --color-base-content: oklch(94% 0.01 250);
+    --color-primary: oklch(68% 0.17 262);
+    --color-primary-content: oklch(18% 0.04 264);
+    --color-secondary: oklch(64% 0.21 27);
+    --color-secondary-content: oklch(98% 0.01 27);
+    --color-accent: oklch(60% 0.18 17);
+    --color-accent-content: oklch(98% 0.01 17);
+    --color-neutral: oklch(15% 0.03 265);
+    --color-neutral-content: oklch(94% 0.01 250);
+    --color-info: oklch(70% 0.14 240);
+    --color-info-content: oklch(18% 0.03 240);
+    --color-success: oklch(70% 0.16 150);
+    --color-success-content: oklch(18% 0.03 150);
+    --color-warning: oklch(84% 0.16 85);
+    --color-warning-content: oklch(25% 0.05 85);
+    --color-error: oklch(64% 0.21 27);
+    --color-error-content: oklch(98% 0.01 27);
+    --radius-selector: 0.5rem;
+    --radius-field: 0.5rem;
+    --radius-box: 1rem;
+    --size-selector: 0.25rem;
+    --size-field: 0.25rem;
+    --border: 1px;
+    --depth: 1;
+    --noise: 0;
+}
+
+html {
+    font-family: 'Poppins', sans-serif;
+}
+
+/* Tło w stylu ikony: gradient od ciemnego do jasnego niebieskiego */
+.app-hero {
+    background: linear-gradient(160deg, oklch(22% 0.1 264), oklch(32% 0.14 262));
+}
+
+.section-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.6;
+    margin-bottom: 0.75rem;
+}
+
+/* Lampka pingu: świeci, gdy gracz pingnął */
+.ping-lamp {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    vertical-align: middle;
+}
+
+.ping-lamp.lit {
+    background: #ECC94B;
+    box-shadow: 0 0 0 3px rgba(236, 201, 75, 0.35), 0 0 10px 2px rgba(236, 201, 75, 0.8);
+    cursor: pointer;
+    animation: pingPulse 1s ease-in-out infinite;
+}
+
+@keyframes pingPulse {
+    50% { box-shadow: 0 0 0 5px rgba(236, 201, 75, 0.15), 0 0 14px 4px rgba(236, 201, 75, 0.9); }
+}
+
+/* Logi: widoczne maks. 4 wiersze, reszta przewijana */
+.log-list {
+    --log-row-height: 2rem;
+    list-style: none;
+    margin: 0;
+    padding: 0 0.75rem;
+    max-height: calc(4 * var(--log-row-height));
+    overflow-y: auto;
+    font-size: 0.85rem;
+    background: var(--color-base-200);
+    border-radius: var(--radius-box);
+}
+
+.log-list li {
+    box-sizing: border-box;
+    height: var(--log-row-height);
+    line-height: calc(var(--log-row-height) - 1px);
+    border-bottom: 1px solid var(--color-base-300);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-list li:last-child {
+    border-bottom: none;
+}
+
+.log-time {
+    opacity: 0.6;
+    font-size: 0.75rem;
+    margin-right: 0.5rem;
+}
+
+/* Kwadratowe przyciski zakładek: ikona nad mniejszym napisem */
+.tab-square {
+    width: 5rem;
+    height: 5rem;
+    padding: 0.25rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1;
+    border-radius: var(--radius-box);
+}
