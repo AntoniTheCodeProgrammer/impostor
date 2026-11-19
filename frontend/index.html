@@ -60,8 +60,15 @@
             </section>
 
             <div class="mb-6">
-                <button id="ping-btn" class="btn btn-primary px-8" type="button">Ping</button>
-                <p id="ping-msg" class="text-sm opacity-70 mt-2 min-h-5"></p>
+                <div class="flex items-start gap-2 flex-wrap">
+                    <form id="message-form" class="flex gap-2 flex-wrap">
+                        <input id="message-input" class="input w-48" type="text" maxlength="20" placeholder="Wiadomość do admina" aria-label="Wiadomość do admina (maksymalnie 20 znaków)" required>
+                        <button id="message-btn" class="btn btn-outline" type="submit">Wyślij</button>
+                    </form>
+                    <button id="ping-btn" class="btn btn-primary px-8" type="button">Ping</button>
+                </div>
+                <p id="ping-msg" class="text-sm opacity-70 mt-2 min-h-5" role="status"></p>
+                <p id="message-msg" class="text-sm opacity-70 min-h-5" role="status"></p>
             </div>
 
             <section id="task-section" class="mb-6" aria-labelledby="task-heading" hidden>
@@ -117,6 +124,8 @@
                 localStorage.removeItem(key);
             }
             roleIsVisible = false;
+            document.getElementById("message-input").value = "";
+            document.getElementById("message-msg").textContent = "";
         }
         function getRole() { return localStorage.getItem("role"); }
         function setRole(r) {
@@ -434,6 +443,36 @@
                 button.disabled = false;
                 msg.textContent = "";
             }, 3000);
+        });
+
+        document.getElementById("message-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const input = document.getElementById("message-input");
+            const button = document.getElementById("message-btn");
+            const status = document.getElementById("message-msg");
+            const message = input.value.trim();
+            if (!message) {
+                status.textContent = "Wpisz wiadomość";
+                return;
+            }
+            button.disabled = true;
+            try {
+                const res = await apiFetch("/message", {
+                    method: "POST",
+                    body: JSON.stringify({ message }),
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    status.textContent = typeof data.detail === "string" ? data.detail : "Nie udało się wysłać wiadomości";
+                    return;
+                }
+                if (input.value.trim() === message) input.value = "";
+                status.textContent = "Wiadomość wysłana ✓";
+            } catch {
+                status.textContent = "Nie można połączyć z serwerem";
+            } finally {
+                button.disabled = false;
+            }
         });
 
         render();

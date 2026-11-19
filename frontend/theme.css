@@ -55,6 +55,8 @@ html {
     width: 12px;
     height: 12px;
     margin-left: 6px;
+    padding: 0;
+    border: 0;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.2);
     vertical-align: middle;
@@ -69,6 +71,16 @@ html {
 
 @keyframes pingPulse {
     50% { box-shadow: 0 0 0 5px rgba(236, 201, 75, 0.15), 0 0 14px 4px rgba(236, 201, 75, 0.9); }
+}
+
+.ping-lamp.lit.message {
+    background: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35), 0 0 10px 2px rgba(239, 68, 68, 0.8);
+    animation-name: messagePulse;
+}
+
+@keyframes messagePulse {
+    50% { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.15), 0 0 14px 4px rgba(239, 68, 68, 0.9); }
 }
 
 /* Logi: widoczne maks. 4 wiersze, reszta przewijana */
@@ -86,12 +98,11 @@ html {
 
 .log-list li {
     box-sizing: border-box;
-    height: var(--log-row-height);
-    line-height: calc(var(--log-row-height) - 1px);
+    min-height: var(--log-row-height);
+    line-height: 1.4;
+    padding: 0.4rem 0;
     border-bottom: 1px solid var(--color-base-300);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
 }
 
 .log-list li:last-child {

@@ -60,6 +60,7 @@ USERNAME_RE = re.compile(r"^[\w .\-]{1,24}$")
 # Active WebSocket connections: username -> set of WebSockets (np. kilka kart)
 active_connections: dict[str, set[WebSocket]] = {}
 _last_ping: dict[str, float] = {}
+_last_message: dict[str, float] = {}
 # Połączenia panelu admina – dostają zmiany graczy i logów zamiast odpytywania
 active_admin_connections: set[WebSocket] = set()
 
@@ -125,6 +126,7 @@ async def init_db():
             "CREATE TABLE IF NOT EXISTS activity_log "
             "(id INTEGER PRIMARY KEY, created_at TEXT, username TEXT, action TEXT, detail TEXT)"
         )
+        await _add_column(client, "user_pings", "has_message INTEGER DEFAULT 0")
         await _add_column(client, "user_rewards", "description TEXT DEFAULT ''")
         if await _add_column(client, "challenges", "reward_id INTEGER DEFAULT NULL"):
             # Dotychczasowe tekstowe nagrody wyzwań trafiają do katalogu, żeby ich nie stracić
@@ -275,6 +277,9 @@ class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)
 
+class MessageBody(BaseModel):
+    message: str = Field(min_length=1, max_length=20)
+
 class RoleBody(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     description: str = Field(default="", max_length=500)
@@ -366,9 +371,9 @@ async def admin_user_rows(client, usernames: list[str] | None = None) -> list[di
          "LEFT JOIN user_tasks ut ON u.username = ut.username "
          "LEFT JOIN challenges c ON u.challenge_id = c.id" + u_where, u_args),
         ("SELECT id, username, reward, description, used FROM user_rewards" + r_where + " ORDER BY id", r_args),
-        ("SELECT username FROM user_pings" + r_where, r_args),
+        ("SELECT username, has_message FROM user_pings" + r_where, r_args),
     ])
-    pinged = {row[0] for row in pings_result.rows}
+    pings = {row[0]: bool(row[1]) for row in pings_result.rows}
     rewards_by_user: dict[str, list[dict]] = {}
     for row in rewards_result.rows:
         rw = row_to_dict(rewards_result.columns, row)
@@ -387,7 +392,8 @@ async def admin_user_rows(client, usernames: list[str] | None = None) -> list[di
             "challenge_id": r["challenge_id"],
             "challenge": r["challenge_title"],
             "rewards": rewards_by_user.get(r["username"], []),
-            "pinged": r["username"] in pinged,
+            "pinged": r["username"] in pings,
+            "has_message": pings.get(r["username"], False),
         })
     return users
 
@@ -556,6 +562,33 @@ async def ping(username: str = Depends(current_user)):
     return {"status": "pinged"}
 
 
+@app.post("/message")
+async def send_message(data: MessageBody, username: str = Depends(current_user)):
+    message = data.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="Wpisz wiadomość")
+    now = time.monotonic()
+    if now - _last_message.get(username, float("-inf")) < 2:
+        raise HTTPException(status_code=429, detail="Za szybko – poczekaj chwilę")
+    _last_message[username] = now
+
+    async with get_client() as client:
+        exists = await client.execute("SELECT 1 FROM users WHERE username = ?", [username])
+        if not exists.rows:
+            raise HTTPException(status_code=401, detail="Konto zostało usunięte")
+        ts = now_iso()
+        _, log_result = await client.batch([
+            ("INSERT INTO user_pings (username, pinged_at, has_message) VALUES (?, ?, 1) "
+             "ON CONFLICT(username) DO UPDATE SET pinged_at = excluded.pinged_at, has_message = 1",
+             [username, ts]),
+            ("INSERT INTO activity_log (created_at, username, action, detail) VALUES (?, ?, 'message', ?)",
+             [ts, username, message]),
+        ])
+    await publish_log(log_result.last_insert_rowid, ts, username, "message", message)
+    await publish_users([username])
+    return {"status": "sent"}
+
+
 @app.get("/")
 async def health():
     return {"status": "ok"}
@@ -654,6 +687,14 @@ async def clear_ping(username: str):
     return {"status": "cleared"}
 
 
+@app.post("/admin/clear-pings")
+async def clear_all_pings():
+    async with get_client() as client:
+        result = await client.execute("DELETE FROM user_pings RETURNING username")
+    await publish_users([row[0] for row in result.rows])
+    return {"status": "cleared"}
+
+
 @app.get("/admin/logs")
 async def list_logs(limit: int = 200):
     limit = max(1, min(limit, 1000))
@@ -680,6 +721,7 @@ async def delete_user(username: str):
         raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
 
     _last_ping.pop(username, None)
+    _last_message.pop(username, None)
     for ws in list(active_connections.pop(username, ())):
         try:
             await ws.send_text(json.dumps({"type": "kicked"}))

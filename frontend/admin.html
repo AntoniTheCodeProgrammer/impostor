@@ -278,6 +278,7 @@
                 </div>
                 <div class="card-actions mt-3">
                     <button id="refresh-btn" class="btn btn-outline btn-sm" type="button">Odśwież</button>
+                    <button id="clear-pings-btn" class="btn btn-outline btn-sm" type="button">Zgaś wszystkie powiadomienia</button>
                 </div>
             </div>
         </section>
@@ -362,6 +363,7 @@
                 for (const user of users) {
                     const editRow = editingUsers.get(user.username);
                     if (editRow) {
+                        editRow.cells[2].innerHTML = statusHtml(user);
                         tbody.appendChild(editRow);
                     } else {
                         tbody.appendChild(buildUserRow(user));
@@ -373,7 +375,11 @@
 
         function statusHtml(user) {
             const name = escQ(user.username);
-            return `${user.online ? "🟢" : "⚫"}<span class="ping-lamp${user.pinged ? " lit" : ""}" ${user.pinged ? `title="Gracz pingnął – kliknij, aby zgasić" onclick="clearPing('${name}')"` : ""}></span>`;
+            const title = user.has_message ? "Gracz wysłał wiadomość – kliknij, aby zgasić" : "Gracz pingnął – kliknij, aby zgasić";
+            const lamp = user.pinged
+                ? `<button type="button" class="ping-lamp lit${user.has_message ? " message" : ""}" title="${title}" aria-label="${title}" onclick="clearPing('${name}')"></button>`
+                : `<span class="ping-lamp" aria-hidden="true"></span>`;
+            return `${user.online ? "🟢" : "⚫"}${lamp}`;
         }
 
         function rewardsHtml(rewards) {
@@ -512,7 +518,10 @@
         }
 
         async function clearPing(username) {
-            await fetch(`${API}/admin/users/${encodeURIComponent(username)}/clear-ping`, { method: "POST" });
+            try {
+                const res = await fetch(`${API}/admin/users/${encodeURIComponent(username)}/clear-ping`, { method: "POST" });
+                if (!res.ok) alert("Nie udało się zgasić powiadomienia.");
+            } catch { alert("Brak połączenia."); }
         }
 
         // ── Logs ──────────────────────────────────────────────────────────────
@@ -524,6 +533,7 @@
         function describeLog(log) {
             const who = `<strong>${escHtml(log.username)}</strong>`;
             if (log.action === "ping") return `${who} zpingował`;
+            if (log.action === "message") return `${who} napisał do admina: „${escHtml(log.detail)}”`;
             if (log.action === "reward_used") return `${who} użył nagrody „${escHtml(log.detail)}”`;
             return `${who} ${escHtml(log.action)} ${escHtml(log.detail)}`;
         }
@@ -1292,6 +1302,15 @@
 
         document.getElementById("logout-btn").addEventListener("click", () => { clearAdmin(); render(); });
         document.getElementById("refresh-btn").addEventListener("click", () => { loadUsers(); loadLogs(); });
+        document.getElementById("clear-pings-btn").addEventListener("click", async () => {
+            const button = document.getElementById("clear-pings-btn");
+            button.disabled = true;
+            try {
+                const res = await fetch(`${API}/admin/clear-pings`, { method: "POST" });
+                if (!res.ok) alert("Nie udało się zgasić powiadomień.");
+            } catch { alert("Brak połączenia."); }
+            finally { button.disabled = false; }
+        });
 
         // Po powrocie do karty wznawiamy połączenie tylko gdy jest martwe – działające na bieżąco zdarzenia nie wymagają odświeżania
         document.addEventListener("visibilitychange", () => {

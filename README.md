@@ -2,6 +2,11 @@
 
 Aplikacja wspomagająca prowadzenie gry towarzyskiej (podobnej do Mafii/Among Us).
 
+Gracz może wysłać ping lub wiadomość do administratora (maksymalnie 20 znaków).
+Wiadomości z nazwą nadawcy są widoczne w logach. Żółta lampka oznacza ping,
+a czerwona wiadomość; administrator może zgasić je pojedynczo lub wszystkie
+naraz. Zgaszenie lampki nie usuwa wpisów z logów.
+
 ---
 
 ## Architektura
