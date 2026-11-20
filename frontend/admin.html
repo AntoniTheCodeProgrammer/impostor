@@ -165,6 +165,10 @@
                         <button id="draw-challenges-btn" class="btn btn-primary btn-outline btn-sm" type="button">🎲 Wylosuj</button>
                     </div>
                     <p class="text-sm text-base-content/60 mt-1">Zostanie wylosowanych tylu graczy z przypisaniem wyzwania z puli zaznaczonych wyżej.</p>
+                    <div class="flex items-center gap-2 flex-wrap mt-3">
+                        <button id="assign-selected-challenges-btn" class="btn btn-secondary btn-outline btn-sm" type="button">🎯 Przydziel każde zaznaczone</button>
+                    </div>
+                    <p class="text-sm text-base-content/60 mt-1">Każde zaznaczone wyzwanie trafi do innego losowego gracza bez aktywnego wyzwania.</p>
                     <p id="draw-msg" class="text-sm text-success mt-2" hidden></p>
                     <p id="draw-err" class="text-sm text-error mt-2" hidden></p>
                 </div>
@@ -1163,6 +1167,26 @@
             if (!res.ok) { err.textContent = data.detail; err.hidden = false; return; }
 
             msg.textContent = `Rozlosowano wyzwania dla ${data.assignments.length} graczy.`;
+            msg.hidden = false;
+        });
+
+        document.getElementById("assign-selected-challenges-btn").addEventListener("click", async () => {
+            const msg = document.getElementById("draw-msg");
+            const err = document.getElementById("draw-err");
+            msg.hidden = err.hidden = true;
+            const checked = Array.from(document.querySelectorAll(".ch-check:checked")).map(cb => parseInt(cb.value));
+
+            if (checked.length === 0) { err.textContent = "Zaznacz przynajmniej jedno wyzwanie."; err.hidden = false; return; }
+
+            const res = await fetch(`${API}/admin/assign-selected-challenges`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ challenge_ids: checked }),
+            });
+            const data = await res.json();
+            if (!res.ok) { err.textContent = data.detail; err.hidden = false; return; }
+
+            msg.textContent = "Przydzielono innym graczom: " +
+                data.assignments.map(a => `${a.username} ← ${a.challenge}`).join(", ");
             msg.hidden = false;
         });
 

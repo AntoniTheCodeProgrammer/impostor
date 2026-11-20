@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 (function () {
-    const PRODUCTION_API_URL = "https://impostor-backend.onrender.com";
+    const PRODUCTION_API_URL = "https://inpostor-backend.onrender.com";
     const LOCAL_API_URL = "http://localhost:8000";
 
     const isLocal = ["", "localhost", "127.0.0.1"].includes(window.location.hostname);

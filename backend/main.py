@@ -319,6 +319,9 @@ class DrawChallengesRequest(BaseModel):
     challenge_ids: list[int]
     count: int = Field(ge=1)
 
+class AssignSelectedChallengesRequest(BaseModel):
+    challenge_ids: list[int]
+
 class SeedRequest(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)
@@ -1235,6 +1238,58 @@ async def draw_challenges(req: DrawChallengesRequest):
         "assignments": [
             {"username": a["username"], "challenge": a["challenge"]["title"]}
             for a in assignments
+        ],
+    }
+
+
+@app.post("/admin/assign-selected-challenges")
+async def assign_selected_challenges(req: AssignSelectedChallengesRequest):
+    challenge_ids = list(dict.fromkeys(req.challenge_ids))
+    if not challenge_ids:
+        raise HTTPException(status_code=400, detail="Zaznacz przynajmniej jedno wyzwanie")
+
+    placeholders = ",".join("?" * len(challenge_ids))
+    async with get_client() as client:
+        eligible_result, challenges_result = await client.batch([
+            "SELECT username FROM users WHERE challenge_id IS NULL",
+            (f"SELECT * FROM challenges WHERE id IN ({placeholders})", challenge_ids),
+        ])
+    eligible_users = [row[0] for row in eligible_result.rows]
+    challenges = [row_to_dict(challenges_result.columns, r) for r in challenges_result.rows]
+
+    if len(challenges) != len(challenge_ids):
+        raise HTTPException(status_code=404, detail="Niektóre wybrane wyzwania nie istnieją")
+    if len(eligible_users) < len(challenges):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Za mało graczy bez wyzwania (potrzeba {len(challenges)}, dostępnych {len(eligible_users)})",
+        )
+
+    chosen_users = random.sample(eligible_users, len(challenges))
+    random.shuffle(challenges)
+    assignments = [
+        {"username": username, "challenge": challenge}
+        for username, challenge in zip(chosen_users, challenges)
+    ]
+
+    async with get_client() as client:
+        await client.batch([
+            ("UPDATE users SET challenge_id=? WHERE username=?", [a["challenge"]["id"], a["username"]])
+            for a in assignments
+        ])
+
+    for assignment in assignments:
+        await send_to(
+            assignment["username"],
+            {"type": "challenge", "challenge": public_challenge(assignment["challenge"])},
+        )
+    await publish_users([assignment["username"] for assignment in assignments])
+
+    return {
+        "status": "ok",
+        "assignments": [
+            {"username": assignment["username"], "challenge": assignment["challenge"]["title"]}
+            for assignment in assignments
         ],
     }
 
